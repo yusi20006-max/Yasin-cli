@@ -70,6 +70,32 @@ describe('ConfigManager', () => {
     expect(all.general.theme).toBe('custom');
     expect(all.general.logLevel).toBe('info');
   });
+
+  it('should block and prevent prototype pollution through malicious keys', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Try setting __proto__ keys
+    configManager.set('__proto__.polluted', 'yes');
+    expect({}.polluted).toBeUndefined();
+    expect(configManager.get('__proto__.polluted')).toBeUndefined();
+
+    // Try setting constructor.prototype keys
+    configManager.set('constructor.prototype.polluted2', 'yes');
+    expect({}.polluted2).toBeUndefined();
+    expect(configManager.get('constructor.prototype.polluted2')).toBeUndefined();
+
+    // Try nested prototype pollution
+    configManager.set('general.__proto__.polluted3', 'yes');
+    expect({}.polluted3).toBeUndefined();
+
+    // Try deepMerge prototype pollution
+    const pollutedPayload = JSON.parse('{"__proto__": {"pollutedMerge": "yes"}}');
+    const merged = configManager.deepMerge({}, pollutedPayload);
+    expect({}.pollutedMerge).toBeUndefined();
+    expect(merged.__proto__.pollutedMerge).toBeUndefined();
+
+    warnSpy.mockRestore();
+  });
 });
 
 describe('ConfigCommand', () => {

@@ -137,4 +137,40 @@ describe('ServiceManager & ServiceCommand', () => {
     const logs = serviceManager.getServiceLogs('log-srv', 2);
     expect(logs).toContain('line 2\nline 3');
   });
+
+  it('should handle synchronous spawn failures gracefully', () => {
+    // Intentionally pass an invalid command (which fails instantly or is invalid)
+    serviceManager.registerService('fail-srv', 'Fail Srv', '');
+    expect(() => {
+      serviceManager.startService('fail-srv');
+    }).toThrow('Failed to spawn service');
+  });
+
+  it('should handle asynchronous spawn failures gracefully and write to logs', async () => {
+    serviceManager.registerService('async-fail-srv', 'Async Fail Srv', 'nonexistentbinary12345');
+
+    // It should not throw synchronously (since spawn returns child, but child emits 'error' asynchronously)
+    let errOccurred = false;
+    let details;
+    try {
+      details = serviceManager.startService('async-fail-srv');
+    } catch (e) {
+      errOccurred = true;
+    }
+
+    // Node child_process.spawn might throw ENOENT synchronously on some platforms (like Windows/Mac)
+    // and emit it asynchronously on others. We support both.
+    if (!errOccurred) {
+      expect(details.status).toBe('running');
+      // Wait for the async error to fire
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      const services = serviceManager.listServices();
+      const status = services.find(s => s.id === 'async-fail-srv').status;
+      expect(status).toBe('stopped');
+
+      const logs = serviceManager.getServiceLogs('async-fail-srv');
+      expect(logs).toContain('Asynchronous execution error:');
+    }
+  });
 });

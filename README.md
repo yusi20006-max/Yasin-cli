@@ -10,6 +10,7 @@ Yasin CLI is a modular, extensible, and high-performance Command Line Interface 
 4. **Status Command**: Real-time monitoring showing CLI configuration paths, active processes, system resource metrics (uptime, memory, CPU load), and loaded modules.
 5. **Service Manager**: Cross-platform background daemon/process manager designed to spawn, stop, monitor, list, and view logs of long-running tasks.
 6. **Plugin System**: Dynamic loading framework allowing custom extensions to register new commands during application startup, with built-in actions to install, list, enable, disable, and uninstall plugins.
+7. **Unified Ecosystem Integration & Command Groups**: Cross-component command modules (`core`, `agent`, `hub`, `relay`) delegating directly to a decoupled, testable integration adapter layer supporting consistent status, start, stop, restart, and doctor subcommands.
 
 ## Architecture
 
@@ -18,6 +19,11 @@ The project has a highly modular architecture separated into distinct layers:
 ```
 src/
 ├── index.js             # Main bootstrap and orchestration entry point
+├── adapters/
+│   ├── CoreAdapter.js   # Integration layer with Yasin-Core
+│   ├── AgentAdapter.js  # Integration layer with Yasin-Agent
+│   ├── HubAdapter.js    # Integration layer with YasinHub
+│   └── RelayAdapter.js  # Integration layer with YasinRelay
 ├── config/
 │   └── ConfigManager.js # Config management core (XDG, AppData, dot-notation resolution)
 ├── core/
@@ -28,7 +34,11 @@ src/
 │   ├── doctor.js        # Doctor health check & auto-healing implementation
 │   ├── status.js        # Resource monitoring and meta status report
 │   ├── service.js       # Background process manager subcommands
-│   └── plugin.js        # Plugin installer and state toggler subcommands
+│   ├── plugin.js        # Plugin installer and state toggler subcommands
+│   ├── core.js          # Yasin-Core ecosystem commands status/start/stop/restart/doctor
+│   ├── agent.js         # Yasin-Agent ecosystem commands status/start/stop/restart/doctor
+│   ├── hub.js           # YasinHub ecosystem commands status/start/stop/restart/doctor
+│   └── relay.js         # YasinRelay ecosystem commands status/start/stop/restart/doctor
 ├── services/
 │   └── ServiceManager.js # Process spawn, track, log, and kill logic
 └── plugins/
@@ -122,6 +132,24 @@ Extend CLI capabilities dynamically by installing extension folders:
 
 # Uninstall plugin
 ./yasin.sh plugin uninstall custom-plugin
+```
+
+### 6. Unified Ecosystem Commands (`core`, `agent`, `hub`, `relay`)
+Unified controls for various ecosystem products running on top of Mock Adapters:
+```bash
+# Status check of core, agent, hub or relay
+./yasin.sh core status
+./yasin.sh agent status
+./yasin.sh hub status
+./yasin.sh relay status
+
+# Managing component lifecycles
+./yasin.sh core start
+./yasin.sh core stop
+./yasin.sh core restart
+
+# Environment suitability assessment (doctor)
+./yasin.sh agent doctor
 ```
 
 ## Test Suite

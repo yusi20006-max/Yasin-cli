@@ -120,4 +120,42 @@ describe('CommandRegistry', () => {
     expect(logMock).toHaveBeenCalledWith(expect.stringContaining('Command: test-cmd'));
     expect(exitMock).toHaveBeenCalledWith(0);
   });
+
+  it('should support asynchronous command execution and handle successes', async () => {
+    class AsyncSuccessCommand extends Command {
+      constructor() {
+        super({ name: 'async-success' });
+        this.called = false;
+      }
+      async execute() {
+        this.called = true;
+        return 'done';
+      }
+    }
+    const cmd = new AsyncSuccessCommand();
+    registry.register(cmd);
+    const p = registry.dispatch(['async-success']);
+    expect(p).toBeInstanceOf(Promise);
+    const val = await p;
+    expect(val).toBe('done');
+    expect(cmd.called).toBe(true);
+  });
+
+  it('should handle asynchronous command rejections and exit gracefully', async () => {
+    class AsyncFailCommand extends Command {
+      constructor() {
+        super({ name: 'async-fail' });
+      }
+      async execute() {
+        throw new Error('Async execution failure');
+      }
+    }
+    const cmd = new AsyncFailCommand();
+    registry.register(cmd);
+    const p = registry.dispatch(['async-fail']);
+    expect(p).toBeInstanceOf(Promise);
+    await p;
+    expect(errorMock).toHaveBeenCalledWith(expect.stringContaining('Error executing command "async-fail":'), 'Async execution failure');
+    expect(exitMock).toHaveBeenCalledWith(1);
+  });
 });

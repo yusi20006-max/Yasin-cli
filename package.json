@@ -8,17 +8,24 @@
   },
   "scripts": {
     "test": "jest",
-    "lint": "echo 'No linting tool configured yet'"
+    "lint": "eslint src tests"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/yusi20006-max/Yasin-cli.git"
   },
-  "keywords": ["cli", "yasin", "extensible", "service-manager"],
+  "keywords": [
+    "cli",
+    "yasin",
+    "extensible",
+    "service-manager"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.0",
     "jest": "^29.7.0"
   }
 }

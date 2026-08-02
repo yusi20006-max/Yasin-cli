@@ -12,6 +12,12 @@ const StatusCommand = require('./commands/status');
 const ServiceCommand = require('./commands/service');
 const PluginCommand = require('./commands/plugin');
 
+// Import Ecosystem Commands
+const CoreCommand = require('./commands/core');
+const AgentCommand = require('./commands/agent');
+const HubCommand = require('./commands/hub');
+const RelayCommand = require('./commands/relay');
+
 function bootstrap() {
   try {
     // 1. Initialize core systems
@@ -26,6 +32,12 @@ function bootstrap() {
     registry.register(new StatusCommand(configManager, serviceManager, pluginSystem));
     registry.register(new ServiceCommand(serviceManager));
     registry.register(new PluginCommand(pluginSystem));
+
+    // Register Ecosystem Commands
+    registry.register(new CoreCommand());
+    registry.register(new AgentCommand());
+    registry.register(new HubCommand());
+    registry.register(new RelayCommand());
 
     // 3. Load dynamic plugins (which can register custom commands)
     pluginSystem.loadPlugins();
