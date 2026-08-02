@@ -65,20 +65,39 @@ class ConfigManager {
     fs.writeFileSync(this.configPath, JSON.stringify(data, null, 2), 'utf8');
   }
 
+  isKeySafe(keyPath) {
+    if (!keyPath) return true;
+    const forbidden = ['__proto__', 'constructor', 'prototype'];
+    const parts = keyPath.split('.');
+    return !parts.some(part => forbidden.includes(part));
+  }
+
   get(keyPath, defaultValue = undefined) {
     if (!keyPath) return this.config;
+    if (!this.isKeySafe(keyPath)) {
+      console.warn(`Warning: Key contains prohibited prototype-pollution keywords.`);
+      return defaultValue;
+    }
     const value = this.getValueByPath(this.config, keyPath);
     return value !== undefined ? value : defaultValue;
   }
 
   set(keyPath, value) {
     if (!keyPath) return;
+    if (!this.isKeySafe(keyPath)) {
+      console.warn(`Warning: Attempted setting prohibited prototype-pollution key.`);
+      return;
+    }
     this.setValueByPath(this.config, keyPath, value);
     this.saveConfig(this.config);
   }
 
   delete(keyPath) {
     if (!keyPath) return;
+    if (!this.isKeySafe(keyPath)) {
+      console.warn(`Warning: Attempted deleting prohibited prototype-pollution key.`);
+      return;
+    }
     const parts = keyPath.split('.');
     let current = this.config;
     for (let i = 0; i < parts.length - 1; i++) {
@@ -97,31 +116,43 @@ class ConfigManager {
   }
 
   getValueByPath(obj, keyPath) {
+    if (!this.isKeySafe(keyPath)) return undefined;
     return keyPath.split('.').reduce((acc, part) => {
       return acc && acc[part] !== undefined ? acc[part] : undefined;
     }, obj);
   }
 
   setValueByPath(obj, keyPath, value) {
+    if (!this.isKeySafe(keyPath)) return;
     const parts = keyPath.split('.');
     let current = obj;
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i];
+      if (part === '__proto__' || part === 'constructor' || part === 'prototype') {
+        return;
+      }
       if (current[part] === undefined || typeof current[part] !== 'object') {
         current[part] = {};
       }
       current = current[part];
     }
-    current[parts[parts.length - 1]] = value;
+    const lastPart = parts[parts.length - 1];
+    if (lastPart !== '__proto__' && lastPart !== 'constructor' && lastPart !== 'prototype') {
+      current[lastPart] = value;
+    }
   }
 
   deepMerge(target, source) {
     const output = Object.assign({}, target);
     if (this.isObject(target) && this.isObject(source)) {
       Object.keys(source).forEach(key => {
+        if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+          return;
+        }
         if (this.isObject(source[key])) {
           if (!(key in target)) {
-            Object.assign(output, { [key]: source[key] });
+            // Clone the object to prevent shared references
+            output[key] = this.deepMerge({}, source[key]);
           } else {
             output[key] = this.deepMerge(target[key], source[key]);
           }
