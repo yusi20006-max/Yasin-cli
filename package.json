@@ -1,0 +1,24 @@
+{
+  "name": "yasin-cli",
+  "version": "1.0.0",
+  "description": "Yasin CLI is a modular, extensible command line interface tool.",
+  "main": "src/index.js",
+  "bin": {
+    "yasin": "./yasin.sh"
+  },
+  "scripts": {
+    "test": "jest",
+    "lint": "echo 'No linting tool configured yet'"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yusi20006-max/Yasin-cli.git"
+  },
+  "keywords": ["cli", "yasin", "extensible", "service-manager"],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}
