@@ -90,9 +90,16 @@ class CommandRegistry {
       }
     }
 
-    // 8. Execute the command
+    // 8. Execute the command (supporting sync/async and handling errors)
     try {
-      command.execute(givenArgs, parsed.options);
+      const result = command.execute(givenArgs, parsed.options);
+      if (result && typeof result.then === 'function') {
+        return result.catch(err => {
+          console.error(`Error executing command "${cmdName}":`, err.message);
+          process.exit(1);
+        });
+      }
+      return result;
     } catch (err) {
       console.error(`Error executing command "${cmdName}":`, err.message);
       process.exit(1);

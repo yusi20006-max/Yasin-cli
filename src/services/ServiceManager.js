@@ -27,7 +27,14 @@ class ServiceManager {
   }
 
   saveStates() {
-    fs.writeFileSync(this.statePath, JSON.stringify(this.states, null, 2), 'utf8');
+    try {
+      const dir = path.dirname(this.statePath);
+      if (fs.existsSync(dir)) {
+        fs.writeFileSync(this.statePath, JSON.stringify(this.states, null, 2), 'utf8');
+      }
+    } catch (e) {
+      // ignore state path saving error if folder was deleted during teardown
+    }
   }
 
   isProcessRunning(pid) {
@@ -76,31 +83,65 @@ class ServiceManager {
     const logFile = path.join(this.logDir, `${id}.log`);
     const out = fs.openSync(logFile, 'a');
 
-    // Split command and arguments if command is a single string or custom
     let cmd = service.command;
     let cmdArgs = [...(service.args || [])];
-
-    // On Windows, running shell commands or .bat requires shell: true
     const isWin = process.platform === 'win32';
 
-    const child = child_process.spawn(cmd, cmdArgs, {
-      detached: true,
-      stdio: ['ignore', out, out],
-      env: { ...process.env, ...(service.env || {}) },
-      shell: isWin // true on windows for better compatibility with .cmd/bin scripts
+    let child;
+    try {
+      child = child_process.spawn(cmd, cmdArgs, {
+        detached: true,
+        stdio: ['ignore', out, out],
+        env: { ...process.env, ...(service.env || {}) },
+        shell: isWin
+      });
+    } catch (spawnError) {
+      fs.writeSync(out, `Spawn Exception: ${spawnError.message}\n`);
+      fs.closeSync(out);
+      this.states[id] = {
+        pid: null,
+        status: 'stopped',
+        endTime: Date.now()
+      };
+      this.saveStates();
+      throw new Error(`Failed to spawn service "${id}": ${spawnError.message}`);
+    }
+
+    // Attach listener for asynchronous errors (e.g., command not found ENOENT)
+    child.on('error', (err) => {
+      try {
+        const errorLog = `Asynchronous execution error: ${err.message}\n`;
+        fs.appendFileSync(logFile, errorLog, 'utf8');
+      } catch (logErr) {}
+
+      // Clean up internal states when child fails to start or crashes immediately
+      this.states[id] = {
+        pid: null,
+        status: 'stopped',
+        endTime: Date.now()
+      };
+      this.saveStates();
     });
 
     const pid = child.pid;
-    child.unref();
-
-    this.states[id] = {
-      pid,
-      status: 'running',
-      startTime: Date.now()
-    };
-    this.saveStates();
-
-    return { id, pid, status: 'running' };
+    if (pid) {
+      child.unref();
+      this.states[id] = {
+        pid,
+        status: 'running',
+        startTime: Date.now()
+      };
+      this.saveStates();
+      return { id, pid, status: 'running' };
+    } else {
+      this.states[id] = {
+        pid: null,
+        status: 'stopped',
+        endTime: Date.now()
+      };
+      this.saveStates();
+      throw new Error(`Failed to retrieve PID for spawned service "${id}".`);
+    }
   }
 
   stopService(id) {
