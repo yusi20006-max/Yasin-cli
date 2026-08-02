@@ -12,6 +12,18 @@ const StatusCommand = require('./commands/status');
 const ServiceCommand = require('./commands/service');
 const PluginCommand = require('./commands/plugin');
 
+// Import Adapters
+const CoreAdapter = require('./adapters/CoreAdapter');
+const AgentAdapter = require('./adapters/AgentAdapter');
+const HubAdapter = require('./adapters/HubAdapter');
+const RelayAdapter = require('./adapters/RelayAdapter');
+
+// Import Ecosystem Commands
+const CoreCommand = require('./commands/core');
+const AgentCommand = require('./commands/agent');
+const HubCommand = require('./commands/hub');
+const RelayCommand = require('./commands/relay');
+
 function bootstrap() {
   try {
     // 1. Initialize core systems
@@ -20,12 +32,24 @@ function bootstrap() {
     const serviceManager = new ServiceManager(configManager);
     const pluginSystem = new PluginSystem(configManager, registry, serviceManager);
 
+    // Initialize adapters
+    const coreAdapter = new CoreAdapter(configManager, serviceManager);
+    const agentAdapter = new AgentAdapter(configManager, serviceManager);
+    const hubAdapter = new HubAdapter(configManager, serviceManager);
+    const relayAdapter = new RelayAdapter(configManager, serviceManager);
+
     // 2. Register core commands
     registry.register(new ConfigCommand(configManager));
     registry.register(new DoctorCommand(configManager));
     registry.register(new StatusCommand(configManager, serviceManager, pluginSystem));
     registry.register(new ServiceCommand(serviceManager));
     registry.register(new PluginCommand(pluginSystem));
+
+    // Register ecosystem commands
+    registry.register(new CoreCommand(coreAdapter));
+    registry.register(new AgentCommand(agentAdapter));
+    registry.register(new HubCommand(hubAdapter));
+    registry.register(new RelayCommand(relayAdapter));
 
     // 3. Load dynamic plugins (which can register custom commands)
     pluginSystem.loadPlugins();
