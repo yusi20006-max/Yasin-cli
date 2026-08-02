@@ -1,0 +1,123 @@
+const Command = require('../src/core/Command');
+const CommandRegistry = require('../src/core/CommandRegistry');
+
+class TestCommand extends Command {
+  constructor() {
+    super({
+      name: 'test-cmd',
+      description: 'A test command for verification',
+      args: [
+        { name: 'reqArg', required: true, description: 'Required arg' },
+        { name: 'optArg', required: false, description: 'Optional arg' }
+      ],
+      options: [
+        { name: '--flag', alias: '-f', type: 'boolean', description: 'A flag' },
+        { name: '--port', alias: '-p', type: 'number', default: 3000, description: 'Port option' }
+      ]
+    });
+    this.executedWith = null;
+  }
+
+  execute(args, options) {
+    this.executedWith = { args, options };
+  }
+}
+
+describe('Command Parser Core', () => {
+  it('should parse options and positional arguments correctly', () => {
+    const cmd = new TestCommand();
+    const result = cmd.parse(['hello', 'world', '--flag', '-p', '4000']);
+    expect(result.args).toEqual(['hello', 'world']);
+    expect(result.options.flag).toBe(true);
+    expect(result.options.port).toBe(4000);
+  });
+
+  it('should use default values for options when not provided', () => {
+    const cmd = new TestCommand();
+    const result = cmd.parse(['hello']);
+    expect(result.args).toEqual(['hello']);
+    expect(result.options.flag).toBe(false);
+    expect(result.options.port).toBe(3000);
+  });
+
+  it('should parse boolean values correctly', () => {
+    const cmd = new TestCommand();
+    const result = cmd.parse(['--flag=true']);
+    expect(result.options.flag).toBe(true);
+  });
+});
+
+describe('CommandRegistry', () => {
+  let registry;
+  let logMock, errorMock, exitMock;
+
+  beforeEach(() => {
+    registry = new CommandRegistry();
+    logMock = jest.spyOn(console, 'log').mockImplementation(() => {});
+    errorMock = jest.spyOn(console, 'error').mockImplementation(() => {});
+    exitMock = jest.spyOn(process, 'exit').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    logMock.mockRestore();
+    errorMock.mockRestore();
+    exitMock.mockRestore();
+  });
+
+  it('should register and retrieve commands', () => {
+    const cmd = new TestCommand();
+    registry.register(cmd);
+    expect(registry.getCommand('test-cmd')).toBe(cmd);
+    expect(registry.listCommands()).toEqual([cmd]);
+  });
+
+  it('should print global help and exit when no command is specified', () => {
+    registry.dispatch([]);
+    expect(logMock).toHaveBeenCalled();
+    expect(exitMock).toHaveBeenCalledWith(0);
+  });
+
+  it('should print global help and exit when --help is supplied globally', () => {
+    registry.dispatch(['-h']);
+    expect(logMock).toHaveBeenCalled();
+    expect(exitMock).toHaveBeenCalledWith(0);
+  });
+
+  it('should print version and exit on -v / --version', () => {
+    registry.dispatch(['-v']);
+    expect(logMock).toHaveBeenCalled();
+    expect(exitMock).toHaveBeenCalledWith(0);
+  });
+
+  it('should fail on unknown command', () => {
+    registry.dispatch(['unknown-cmd']);
+    expect(errorMock).toHaveBeenCalledWith(expect.stringContaining('Unknown command "unknown-cmd"'));
+    expect(exitMock).toHaveBeenCalledWith(1);
+  });
+
+  it('should dispatch to registered command and execute successfully', () => {
+    const cmd = new TestCommand();
+    registry.register(cmd);
+    registry.dispatch(['test-cmd', 'val1', 'val2', '-f']);
+    expect(cmd.executedWith).toEqual({
+      args: ['val1', 'val2'],
+      options: { flag: true, port: 3000 }
+    });
+  });
+
+  it('should fail dispatch if required argument is missing', () => {
+    const cmd = new TestCommand();
+    registry.register(cmd);
+    registry.dispatch(['test-cmd']);
+    expect(errorMock).toHaveBeenCalledWith(expect.stringContaining('Missing required argument <reqArg>'));
+    expect(exitMock).toHaveBeenCalledWith(1);
+  });
+
+  it('should display command-specific help on command --help / -h', () => {
+    const cmd = new TestCommand();
+    registry.register(cmd);
+    registry.dispatch(['test-cmd', '-h']);
+    expect(logMock).toHaveBeenCalledWith(expect.stringContaining('Command: test-cmd'));
+    expect(exitMock).toHaveBeenCalledWith(0);
+  });
+});
