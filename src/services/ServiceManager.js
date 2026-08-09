@@ -108,6 +108,30 @@ class ServiceManager {
     }
 
     const pid = child.pid;
+
+    // مهم: listenerهای error/exit را بلافاصله بعد از spawn موفق و قبل از هر throw
+    // زودهنگام attach می‌کنیم. اگر این کار بعد از چک pid انجام شود، در صورتی که
+    // pid موجود نباشد و throw شود، رویداد async 'error' بدون listener باقی
+    // می‌ماند و کل پردازش Node.js را crash می‌کند (رویداد 'error' مدیریت‌نشده).
+    const markStopped = (status = 'stopped', error = null) => {
+      const current = this.states[id];
+      if (!current || current.pid !== pid) return;
+      this.states[id] = { ...current, pid: null, status, endTime: Date.now(), ...(error ? { error } : {}) };
+      this.saveStates();
+    };
+
+    child.on('error', err => {
+      try { fs.appendFileSync(logFile, `Execution error: ${err.message}\n`, 'utf8'); } catch (e) {}
+      if (this.states[id] && this.states[id].pid === pid) {
+        markStopped('failed', err.message);
+      } else if (!pid) {
+        this.states[id] = { pid: null, status: 'failed', endTime: Date.now(), error: err.message };
+        this.saveStates();
+      }
+    });
+    child.on('exit', code => markStopped(code === 0 ? 'stopped' : 'failed', code === 0 ? null : `Process exited with code ${code}`));
+    child.unref();
+
     if (!pid) {
       fs.closeSync(out);
       this.states[id] = { pid: null, status: 'failed', endTime: Date.now() };
@@ -124,20 +148,6 @@ class ServiceManager {
       workingDirectory: service.workingDirectory || null
     };
     this.saveStates();
-
-    const markStopped = (status = 'stopped', error = null) => {
-      const current = this.states[id];
-      if (!current || current.pid !== pid) return;
-      this.states[id] = { ...current, pid: null, status, endTime: Date.now(), ...(error ? { error } : {}) };
-      this.saveStates();
-    };
-
-    child.on('error', err => {
-      try { fs.appendFileSync(logFile, `Execution error: ${err.message}\n`, 'utf8'); } catch (e) {}
-      markStopped('failed', err.message);
-    });
-    child.on('exit', code => markStopped(code === 0 ? 'stopped' : 'failed', code === 0 ? null : `Process exited with code ${code}`));
-    child.unref();
     return { id, pid, status: 'running' };
   }
 

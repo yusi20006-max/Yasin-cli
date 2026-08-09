@@ -82,7 +82,7 @@ describe('ServiceManager & ServiceCommand', () => {
   it('should fail starting unregistered service', () => {
     expect(() => {
       serviceManager.startService('ghost-service');
-    }).toThrow('is not registered');
+    }).toThrow('is not configured with an executable command');
   });
 
   it('should spawn a real cross-platform background service and stop it', async () => {
@@ -143,7 +143,7 @@ describe('ServiceManager & ServiceCommand', () => {
     serviceManager.registerService('fail-srv', 'Fail Srv', '');
     expect(() => {
       serviceManager.startService('fail-srv');
-    }).toThrow('Failed to spawn service');
+    }).toThrow('is not configured with an executable command');
   });
 
   it('should handle asynchronous spawn failures gracefully and write to logs', async () => {
