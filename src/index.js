@@ -13,6 +13,7 @@ const PluginCommand = require('./commands/plugin');
 const DiscoverCommand = require('./commands/discover');
 const HealthCommand = require('./commands/health');
 const LogsCommand = require('./commands/logs');
+const LifecycleCommand = require('./commands/lifecycle');
 
 const { createEcosystemAdapters } = require('./ecosystem');
 
@@ -39,6 +40,9 @@ function bootstrap() {
     registry.register(new DiscoverCommand(adapters));
     registry.register(new HealthCommand(adapters));
     registry.register(new LogsCommand(serviceManager));
+    registry.register(new LifecycleCommand('start', adapters));
+    registry.register(new LifecycleCommand('stop', adapters));
+    registry.register(new LifecycleCommand('restart', adapters));
 
     registry.register(new CoreCommand(coreAdapter));
     registry.register(new AgentCommand(agentAdapter));
