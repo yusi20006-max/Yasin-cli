@@ -1,17 +1,17 @@
-const { getEcosystemAdapters } = require('../ecosystem');
+const Command = require('../core/Command');
 
-module.exports = {
-  name: 'health',
-  description: 'Check health of Yasin ecosystem services',
-  async execute() {
-    const adapters = getEcosystemAdapters();
-    const results = [];
-
-    for (const adapter of adapters) {
-      results.push(await adapter.doctor());
-    }
-
-    const healthy = results.every((result) => result.status === 'healthy' || result.status === 'ready');
-    return { healthy, services: results };
+class HealthCommand extends Command {
+  constructor(adapters) {
+    super({ name: 'health', description: 'Check health of Yasin ecosystem services' });
+    this.adapters = adapters;
   }
-};
+
+  execute() {
+    const services = this.adapters.map((adapter) => adapter.doctor());
+    const healthy = services.every((result) => result.status === 'healthy');
+    console.log(JSON.stringify({ healthy, services }, null, 2));
+    return { healthy, services };
+  }
+}
+
+module.exports = HealthCommand;
