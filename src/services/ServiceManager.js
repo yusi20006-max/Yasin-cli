@@ -7,93 +7,55 @@ class ServiceManager {
     this.configManager = configManager;
     this.statePath = path.join(this.configManager.configDir, 'services-state.json');
     this.logDir = path.join(this.configManager.configDir, 'logs');
-
-    if (!fs.existsSync(this.logDir)) {
-      fs.mkdirSync(this.logDir, { recursive: true });
-    }
-
+    if (!fs.existsSync(this.logDir)) fs.mkdirSync(this.logDir, { recursive: true });
     this.states = this.loadStates();
   }
 
   loadStates() {
     if (!fs.existsSync(this.statePath)) return {};
-    try {
-      return JSON.parse(fs.readFileSync(this.statePath, 'utf8'));
-    } catch (e) {
-      return {};
-    }
+    try { return JSON.parse(fs.readFileSync(this.statePath, 'utf8')); } catch (e) { return {}; }
   }
 
   saveStates() {
     try {
       const dir = path.dirname(this.statePath);
-      if (fs.existsSync(dir)) {
-        fs.writeFileSync(this.statePath, JSON.stringify(this.states, null, 2), 'utf8');
-      }
-    } catch (e) {
-      // State persistence must not crash the CLI during teardown.
-    }
+      if (fs.existsSync(dir)) fs.writeFileSync(this.statePath, JSON.stringify(this.states, null, 2), 'utf8');
+    } catch (e) {}
   }
 
   isProcessRunning(pid) {
     if (!pid) return false;
-    try {
-      process.kill(pid, 0);
-      return true;
-    } catch (e) {
-      return false;
-    }
+    try { process.kill(pid, 0); return true; } catch (e) { return false; }
   }
 
   getProcessIdentity(pid) {
     if (!pid) return null;
-
     try {
-      if (process.platform === 'linux') {
-        const executable = fs.readlinkSync(`/proc/${pid}/exe`);
-        return { executable };
-      }
-
+      if (process.platform === 'linux') return { executable: fs.readlinkSync(`/proc/${pid}/exe`) };
       if (process.platform === 'darwin') {
-        const output = child_process.execFileSync('ps', ['-p', String(pid), '-o', 'comm='], {
-          encoding: 'utf8',
-          timeout: 3000
-        }).trim();
-        return { executable: output || null };
+        const executable = child_process.execFileSync('ps', ['-p', String(pid), '-o', 'comm='], { encoding: 'utf8', timeout: 3000 }).trim();
+        return { executable: executable || null };
       }
-
       if (process.platform === 'win32') {
-        const output = child_process.execFileSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], {
-          encoding: 'utf8',
-          timeout: 3000,
-          windowsHide: true
-        }).trim();
+        const output = child_process.execFileSync('tasklist', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { encoding: 'utf8', timeout: 3000, windowsHide: true }).trim();
         if (!output || output.startsWith('INFO:')) return null;
         const match = output.match(/^"([^"]+)"/);
         return { executable: match ? match[1] : null };
       }
-    } catch (e) {
-      return null;
-    }
-
+    } catch (e) { return null; }
     return null;
   }
 
   isProcessOwned(state, service) {
-    if (!state || !state.pid || !service) return false;
-    if (!this.isProcessRunning(state.pid)) return false;
-
+    if (!state || !state.pid || !service || !this.isProcessRunning(state.pid)) return false;
     const identity = this.getProcessIdentity(state.pid);
-    if (!identity || !identity.executable || !service.command) {
-      return true;
-    }
-
+    if (!identity || !identity.executable || !service.command) return true;
     const expected = path.basename(service.command).toLowerCase();
     const actual = path.basename(identity.executable).toLowerCase();
     return actual === expected || actual === `${expected}.exe`;
   }
 
-  registerService(id, name, command, args = [], env = {}, workingDirectory = null) {
+  registerService(id, name, command, args = [], env = {}, workingDirectory = null, versionArgs = null) {
     const services = this.configManager.get('services') || {};
     services[id] = {
       id,
@@ -101,7 +63,8 @@ class ServiceManager {
       command,
       args,
       env,
-      ...(workingDirectory ? { workingDirectory } : {})
+      ...(workingDirectory ? { workingDirectory } : {}),
+      ...(Array.isArray(versionArgs) ? { versionArgs } : {})
     };
     this.configManager.set('services', services);
   }
@@ -109,7 +72,6 @@ class ServiceManager {
   unregisterService(id) {
     const services = this.configManager.get('services') || {};
     if (!services[id]) return false;
-
     this.stopService(id);
     delete services[id];
     this.configManager.set('services', services);
@@ -121,23 +83,16 @@ class ServiceManager {
   startService(id) {
     const services = this.configManager.get('services') || {};
     const service = services[id];
-    if (!service || !service.command) {
-      throw new Error(`Service "${id}" is not configured with an executable command.`);
-    }
+    if (!service || !service.command) throw new Error(`Service "${id}" is not configured with an executable command.`);
 
     const state = this.states[id] || {};
-    if (state.pid && this.isProcessOwned(state, service)) {
-      throw new Error(`Service "${id}" is already running with PID ${state.pid}.`);
-    }
+    if (state.pid && this.isProcessOwned(state, service)) throw new Error(`Service "${id}" is already running with PID ${state.pid}.`);
 
     const logFile = path.join(this.logDir, `${id}.log`);
     const out = fs.openSync(logFile, 'a');
-    const cmd = service.command;
-    const cmdArgs = [...(service.args || [])];
-
     let child;
     try {
-      child = child_process.spawn(cmd, cmdArgs, {
+      child = child_process.spawn(service.command, [...(service.args || [])], {
         detached: true,
         stdio: ['ignore', out, out],
         env: { ...process.env, ...(service.env || {}) },
@@ -164,8 +119,8 @@ class ServiceManager {
       pid,
       status: 'running',
       startTime: Date.now(),
-      command: cmd,
-      args: cmdArgs,
+      command: service.command,
+      args: [...(service.args || [])],
       workingDirectory: service.workingDirectory || null
     };
     this.saveStates();
@@ -173,27 +128,15 @@ class ServiceManager {
     const markStopped = (status = 'stopped', error = null) => {
       const current = this.states[id];
       if (!current || current.pid !== pid) return;
-      this.states[id] = {
-        ...current,
-        pid: null,
-        status,
-        endTime: Date.now(),
-        ...(error ? { error } : {})
-      };
+      this.states[id] = { ...current, pid: null, status, endTime: Date.now(), ...(error ? { error } : {}) };
       this.saveStates();
     };
 
     child.on('error', err => {
-      try {
-        fs.appendFileSync(logFile, `Execution error: ${err.message}\n`, 'utf8');
-      } catch (e) {}
+      try { fs.appendFileSync(logFile, `Execution error: ${err.message}\n`, 'utf8'); } catch (e) {}
       markStopped('failed', err.message);
     });
-
-    child.on('exit', code => {
-      markStopped(code === 0 ? 'stopped' : 'failed', code === 0 ? null : `Process exited with code ${code}`);
-    });
-
+    child.on('exit', code => markStopped(code === 0 ? 'stopped' : 'failed', code === 0 ? null : `Process exited with code ${code}`));
     child.unref();
     return { id, pid, status: 'running' };
   }
@@ -202,46 +145,30 @@ class ServiceManager {
     const services = this.configManager.get('services') || {};
     const service = services[id];
     const state = this.states[id];
-
     if (!state || !state.pid) {
       this.states[id] = { status: 'stopped', pid: null };
       this.saveStates();
       return false;
     }
-
     if (!this.isProcessOwned(state, service)) {
       this.states[id] = { ...state, pid: null, status: 'unknown', endTime: Date.now() };
       this.saveStates();
       return false;
     }
 
-    const pid = state.pid;
     let terminated = false;
-
     try {
       if (process.platform === 'win32') {
-        child_process.execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], {
-          stdio: 'ignore',
-          windowsHide: true
-        });
+        child_process.execFileSync('taskkill', ['/pid', String(state.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
       } else {
-        process.kill(pid, 'SIGTERM');
+        process.kill(state.pid, 'SIGTERM');
       }
       terminated = true;
     } catch (e) {
-      try {
-        process.kill(pid, 'SIGKILL');
-        terminated = true;
-      } catch (err) {
-        terminated = false;
-      }
+      try { process.kill(state.pid, 'SIGKILL'); terminated = true; } catch (err) { terminated = false; }
     }
 
-    this.states[id] = {
-      pid: null,
-      status: terminated ? 'stopped' : 'failed',
-      endTime: Date.now()
-    };
+    this.states[id] = { pid: null, status: terminated ? 'stopped' : 'failed', endTime: Date.now() };
     this.saveStates();
     return terminated;
   }
@@ -249,19 +176,16 @@ class ServiceManager {
   listServices() {
     const services = this.configManager.get('services') || {};
     const list = [];
-
     Object.keys(services).forEach(id => {
       const service = services[id];
       const state = this.states[id] || { status: 'stopped', pid: null };
       let currentStatus = state.status || 'stopped';
       let currentPid = state.pid || null;
-
       if (currentPid && !this.isProcessOwned(state, service)) {
         currentStatus = this.isProcessRunning(currentPid) ? 'unknown' : 'stopped';
         currentPid = null;
         this.states[id] = { ...state, status: currentStatus, pid: null };
       }
-
       list.push({
         id,
         name: service.name,
@@ -273,7 +197,6 @@ class ServiceManager {
         startTime: state.startTime || null
       });
     });
-
     this.saveStates();
     return list;
   }
@@ -281,15 +204,12 @@ class ServiceManager {
   getServiceLogs(id, linesCount = 50) {
     const logFile = path.join(this.logDir, `${id}.log`);
     if (!fs.existsSync(logFile)) return `No logs found for service "${id}".`;
-
     try {
       const content = fs.readFileSync(logFile, 'utf8');
       const lines = content.split('\n');
       if (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
       return lines.slice(-linesCount).join('\n');
-    } catch (e) {
-      return `Error reading logs: ${e.message}`;
-    }
+    } catch (e) { return `Error reading logs: ${e.message}`; }
   }
 }
 
