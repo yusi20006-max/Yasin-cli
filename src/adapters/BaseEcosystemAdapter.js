@@ -19,43 +19,20 @@ class BaseEcosystemAdapter {
   resolveDefinition() {
     const configured = this.getConfiguredService();
     const command = configured.command || process.env[`${this.envPrefix}_COMMAND`];
-    const args = Array.isArray(configured.args)
-      ? configured.args
-      : [];
-    const env = configured.env && typeof configured.env === 'object'
-      ? configured.env
-      : {};
+    const args = Array.isArray(configured.args) ? configured.args : [];
+    const versionArgs = Array.isArray(configured.versionArgs) ? configured.versionArgs : [...args, '--version'];
+    const env = configured.env && typeof configured.env === 'object' ? configured.env : {};
     const workingDirectory = configured.workingDirectory || process.env[`${this.envPrefix}_WORKDIR`];
-
-    return {
-      command,
-      args,
-      env,
-      workingDirectory
-    };
+    return { command, args, versionArgs, env, workingDirectory };
   }
 
   ensureRegistered() {
     const definition = this.resolveDefinition();
     const services = this.configManager.get('services') || {};
     const existing = services[this.serviceId];
-
-    if (existing && existing.command) {
-      return;
-    }
-
-    if (!definition.command) {
-      return;
-    }
-
-    this.serviceManager.registerService(
-      this.serviceId,
-      this.serviceName,
-      definition.command,
-      definition.args,
-      definition.env,
-      definition.workingDirectory
-    );
+    if (existing && existing.command) return;
+    if (!definition.command) return;
+    this.serviceManager.registerService(this.serviceId, this.serviceName, definition.command, definition.args, definition.env, definition.workingDirectory, definition.versionArgs);
   }
 
   getService() {
@@ -66,24 +43,9 @@ class BaseEcosystemAdapter {
 
   status() {
     const service = this.getService();
-    if (!service) {
-      return {
-        id: this.serviceId,
-        name: this.serviceName,
-        status: 'not-found',
-        pid: null,
-        configured: false
-      };
-    }
-
+    if (!service) return { id: this.serviceId, name: this.serviceName, status: 'not-found', pid: null, configured: false };
     const found = this.serviceManager.listServices().find(item => item.id === this.serviceId);
-    return found || {
-      id: this.serviceId,
-      name: this.serviceName,
-      status: 'stopped',
-      pid: null,
-      configured: true
-    };
+    return found || { id: this.serviceId, name: this.serviceName, status: 'stopped', pid: null, configured: true };
   }
 
   detect() {
@@ -97,36 +59,24 @@ class BaseEcosystemAdapter {
   }
 
   isInstalled() {
-    const service = this.getService();
-    return Boolean(service && service.command);
+    return Boolean(this.getService());
   }
 
   version() {
     const service = this.getService();
-    if (!service || !service.command) {
-      return { version: null, status: 'not-found' };
-    }
-
+    if (!service || !service.command) return { version: null, status: 'not-found' };
     try {
-      const output = child_process.execFileSync(
-        service.command,
-        [...(service.args || []), '--version'],
-        {
-          cwd: service.workingDirectory || undefined,
-          env: { ...process.env, ...(service.env || {}) },
-          encoding: 'utf8',
-          timeout: 10000,
-          stdio: ['ignore', 'pipe', 'pipe']
-        }
-      ).trim();
-
+      const versionArgs = Array.isArray(service.versionArgs) ? service.versionArgs : [...(service.args || []), '--version'];
+      const output = child_process.execFileSync(service.command, versionArgs, {
+        cwd: service.workingDirectory || undefined,
+        env: { ...process.env, ...(service.env || {}) },
+        encoding: 'utf8',
+        timeout: 10000,
+        stdio: ['ignore', 'pipe', 'pipe']
+      }).trim();
       return { version: output || null, status: output ? 'ok' : 'unknown' };
     } catch (error) {
-      return {
-        version: null,
-        status: 'unknown',
-        error: error.message
-      };
+      return { version: null, status: 'unknown', error: error.message };
     }
   }
 
@@ -135,29 +85,13 @@ class BaseEcosystemAdapter {
     const status = this.status();
     const version = this.version();
     const checks = [
-      {
-        name: `${this.serviceName} configured`,
-        status: detection.configured ? 'PASS' : 'FAIL'
-      },
-      {
-        name: `${this.serviceName} process state`,
-        status: status.status === 'running' ? 'PASS' : status.status === 'stopped' ? 'WARN' : 'FAIL'
-      },
-      {
-        name: `${this.serviceName} version`,
-        status: version.status === 'ok' ? 'PASS' : 'WARN'
-      }
+      { name: `${this.serviceName} configured`, status: detection.configured ? 'PASS' : 'FAIL' },
+      { name: `${this.serviceName} process state`, status: status.status === 'running' ? 'PASS' : status.status === 'stopped' ? 'WARN' : 'FAIL' },
+      { name: `${this.serviceName} version`, status: version.status === 'ok' ? 'PASS' : 'WARN' }
     ];
-
     const failed = checks.some(check => check.status === 'FAIL');
     const warned = checks.some(check => check.status === 'WARN');
-
-    return {
-      status: failed ? 'unhealthy' : warned ? 'degraded' : 'healthy',
-      checks,
-      detection,
-      version
-    };
+    return { status: failed ? 'unhealthy' : warned ? 'degraded' : 'healthy', checks, detection, version };
   }
 
   start() {
