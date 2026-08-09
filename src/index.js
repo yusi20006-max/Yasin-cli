@@ -14,8 +14,11 @@ const DiscoverCommand = require('./commands/discover');
 const HealthCommand = require('./commands/health');
 const LogsCommand = require('./commands/logs');
 const LifecycleCommand = require('./commands/lifecycle');
+const ProfileCommand = require('./commands/profile');
 
 const { createEcosystemAdapters } = require('./ecosystem');
+const EcosystemOrchestrator = require('./ecosystem/Orchestrator');
+const ProfileManager = require('./ecosystem/ProfileManager');
 
 const CoreCommand = require('./commands/core');
 const AgentCommand = require('./commands/agent');
@@ -31,6 +34,9 @@ function bootstrap() {
 
     const adapters = createEcosystemAdapters(configManager, serviceManager);
     const [coreAdapter, agentAdapter, hubAdapter, relayAdapter] = adapters;
+    const dependencies = configManager.get('dependencies') || {};
+    const orchestrator = new EcosystemOrchestrator(adapters, dependencies);
+    const profileManager = new ProfileManager(configManager);
 
     registry.register(new ConfigCommand(configManager));
     registry.register(new DoctorCommand(configManager));
@@ -40,9 +46,10 @@ function bootstrap() {
     registry.register(new DiscoverCommand(adapters));
     registry.register(new HealthCommand(adapters));
     registry.register(new LogsCommand(serviceManager));
-    registry.register(new LifecycleCommand('start', adapters));
-    registry.register(new LifecycleCommand('stop', adapters));
-    registry.register(new LifecycleCommand('restart', adapters));
+    registry.register(new LifecycleCommand('start', orchestrator));
+    registry.register(new LifecycleCommand('stop', orchestrator));
+    registry.register(new LifecycleCommand('restart', orchestrator));
+    registry.register(new ProfileCommand(profileManager));
 
     registry.register(new CoreCommand(coreAdapter));
     registry.register(new AgentCommand(agentAdapter));
