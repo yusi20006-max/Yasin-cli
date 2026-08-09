@@ -55,7 +55,7 @@ class ServiceManager {
     return actual === expected || actual === `${expected}.exe`;
   }
 
-  registerService(id, name, command, args = [], env = {}, workingDirectory = null, versionArgs = null) {
+  registerService(id, name, command, args = [], env = {}, workingDirectory = null, versionArgs = null, mode = 'daemon', versionCommand = null, versionCommandArgs = []) {
     const services = this.configManager.get('services') || {};
     services[id] = {
       id,
@@ -63,8 +63,11 @@ class ServiceManager {
       command,
       args,
       env,
+      mode,
       ...(workingDirectory ? { workingDirectory } : {}),
-      ...(Array.isArray(versionArgs) ? { versionArgs } : {})
+      ...(Array.isArray(versionArgs) ? { versionArgs } : {}),
+      ...(versionCommand ? { versionCommand } : {}),
+      ...(Array.isArray(versionCommandArgs) ? { versionCommandArgs } : {})
     };
     this.configManager.set('services', services);
   }
@@ -72,7 +75,7 @@ class ServiceManager {
   unregisterService(id) {
     const services = this.configManager.get('services') || {};
     if (!services[id]) return false;
-    this.stopService(id);
+    if (services[id].mode === 'daemon') this.stopService(id);
     delete services[id];
     this.configManager.set('services', services);
     delete this.states[id];
@@ -84,10 +87,9 @@ class ServiceManager {
     const services = this.configManager.get('services') || {};
     const service = services[id];
     if (!service || !service.command) throw new Error(`Service "${id}" is not configured with an executable command.`);
-
+    if (service.mode !== 'daemon') throw new Error(`Service "${id}" is ${service.mode || 'non-daemon'} and cannot be started as a background service.`);
     const state = this.states[id] || {};
     if (state.pid && this.isProcessOwned(state, service)) throw new Error(`Service "${id}" is already running with PID ${state.pid}.`);
-
     const logFile = path.join(this.logDir, `${id}.log`);
     const out = fs.openSync(logFile, 'a');
     let child;
@@ -106,7 +108,6 @@ class ServiceManager {
       this.saveStates();
       throw new Error(`Failed to spawn service "${id}": ${spawnError.message}`);
     }
-
     const pid = child.pid;
     if (!pid) {
       fs.closeSync(out);
@@ -114,24 +115,14 @@ class ServiceManager {
       this.saveStates();
       throw new Error(`Failed to retrieve PID for spawned service "${id}".`);
     }
-
-    this.states[id] = {
-      pid,
-      status: 'running',
-      startTime: Date.now(),
-      command: service.command,
-      args: [...(service.args || [])],
-      workingDirectory: service.workingDirectory || null
-    };
+    this.states[id] = { pid, status: 'running', startTime: Date.now(), command: service.command, args: [...(service.args || [])], workingDirectory: service.workingDirectory || null };
     this.saveStates();
-
     const markStopped = (status = 'stopped', error = null) => {
       const current = this.states[id];
       if (!current || current.pid !== pid) return;
       this.states[id] = { ...current, pid: null, status, endTime: Date.now(), ...(error ? { error } : {}) };
       this.saveStates();
     };
-
     child.on('error', err => {
       try { fs.appendFileSync(logFile, `Execution error: ${err.message}\n`, 'utf8'); } catch (e) {}
       markStopped('failed', err.message);
@@ -155,19 +146,14 @@ class ServiceManager {
       this.saveStates();
       return false;
     }
-
     let terminated = false;
     try {
-      if (process.platform === 'win32') {
-        child_process.execFileSync('taskkill', ['/pid', String(state.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
-      } else {
-        process.kill(state.pid, 'SIGTERM');
-      }
+      if (process.platform === 'win32') child_process.execFileSync('taskkill', ['/pid', String(state.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true });
+      else process.kill(state.pid, 'SIGTERM');
       terminated = true;
     } catch (e) {
       try { process.kill(state.pid, 'SIGKILL'); terminated = true; } catch (err) { terminated = false; }
     }
-
     this.states[id] = { pid: null, status: terminated ? 'stopped' : 'failed', endTime: Date.now() };
     this.saveStates();
     return terminated;
@@ -178,24 +164,15 @@ class ServiceManager {
     const list = [];
     Object.keys(services).forEach(id => {
       const service = services[id];
-      const state = this.states[id] || { status: 'stopped', pid: null };
-      let currentStatus = state.status || 'stopped';
+      const state = this.states[id] || { status: service.mode === 'daemon' ? 'stopped' : 'on-demand', pid: null };
+      let currentStatus = state.status || (service.mode === 'daemon' ? 'stopped' : 'on-demand');
       let currentPid = state.pid || null;
-      if (currentPid && !this.isProcessOwned(state, service)) {
+      if (service.mode === 'daemon' && currentPid && !this.isProcessOwned(state, service)) {
         currentStatus = this.isProcessRunning(currentPid) ? 'unknown' : 'stopped';
         currentPid = null;
         this.states[id] = { ...state, status: currentStatus, pid: null };
       }
-      list.push({
-        id,
-        name: service.name,
-        command: service.command,
-        args: service.args,
-        workingDirectory: service.workingDirectory || null,
-        status: currentStatus,
-        pid: currentPid,
-        startTime: state.startTime || null
-      });
+      list.push({ id, name: service.name, command: service.command, args: service.args, mode: service.mode || 'daemon', workingDirectory: service.workingDirectory || null, status: currentStatus, pid: currentPid, startTime: state.startTime || null });
     });
     this.saveStates();
     return list;
