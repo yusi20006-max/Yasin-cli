@@ -1,16 +1,16 @@
-const { getEcosystemAdapters } = require('../ecosystem');
+const Command = require('../core/Command');
 
-module.exports = {
-  name: 'discover',
-  description: 'Discover installed Yasin ecosystem services',
-  async execute() {
-    const adapters = getEcosystemAdapters();
-    const results = [];
-
-    for (const adapter of adapters) {
-      results.push(await adapter.detect());
-    }
-
-    return { services: results };
+class DiscoverCommand extends Command {
+  constructor(adapters) {
+    super({ name: 'discover', description: 'Discover installed Yasin ecosystem services' });
+    this.adapters = adapters;
   }
-};
+
+  execute() {
+    const services = this.adapters.map((adapter) => adapter.detect());
+    console.log(JSON.stringify({ services }, null, 2));
+    return { services };
+  }
+}
+
+module.exports = DiscoverCommand;
