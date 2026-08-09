@@ -6,8 +6,7 @@ class PluginSystem {
     this.configManager = configManager;
     this.registry = commandRegistry;
     this.serviceManager = serviceManager;
-    this.pluginsDir = path.join(this.configManager.configDir, 'plugins');
-
+    this.pluginsDir = path.resolve(path.join(this.configManager.configDir, 'plugins'));
     this.ensureDirectoryExists();
   }
 
@@ -17,15 +16,34 @@ class PluginSystem {
     }
   }
 
+  isValidPluginId(id) {
+    return typeof id === 'string' && /^[a-zA-Z0-9_-]+$/.test(id) && id.length <= 100;
+  }
+
+  resolveInside(baseDir, candidate) {
+    const base = path.resolve(baseDir);
+    const resolved = path.resolve(candidate);
+    return resolved === base || resolved.startsWith(`${base}${path.sep}`) ? resolved : null;
+  }
+
+  getPluginDir(id) {
+    if (!this.isValidPluginId(id)) {
+      throw new Error(`Invalid plugin id "${id}".`);
+    }
+    const resolved = this.resolveInside(this.pluginsDir, path.join(this.pluginsDir, id));
+    if (!resolved) throw new Error(`Plugin path escapes the plugin directory.`);
+    return resolved;
+  }
+
   installPlugin(srcPath) {
-    if (!fs.existsSync(srcPath)) {
-      throw new Error(`Plugin source path "${srcPath}" does not exist.`);
+    const source = path.resolve(srcPath);
+    if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) {
+      throw new Error(`Plugin source path "${srcPath}" does not exist or is not a directory.`);
     }
 
-    // Read metadata
     let meta = null;
-    const yasinMetaPath = path.join(srcPath, 'yasin-plugin.json');
-    const pkgMetaPath = path.join(srcPath, 'package.json');
+    const yasinMetaPath = path.join(source, 'yasin-plugin.json');
+    const pkgMetaPath = path.join(source, 'package.json');
 
     if (fs.existsSync(yasinMetaPath)) {
       meta = JSON.parse(fs.readFileSync(yasinMetaPath, 'utf8'));
@@ -42,20 +60,17 @@ class PluginSystem {
       }
     }
 
-    if (!meta || !meta.id) {
-      throw new Error('Invalid plugin: Could not find valid yasin-plugin.json or package.json with "yasinPlugin" flag.');
+    if (!meta || !this.isValidPluginId(meta.id)) {
+      throw new Error('Invalid plugin: plugin id must match [a-zA-Z0-9_-]+ and be at most 100 characters.');
     }
 
-    const destDir = path.join(this.pluginsDir, meta.id);
+    const destDir = this.getPluginDir(meta.id);
     if (fs.existsSync(destDir)) {
-      // Remove existing to upgrade
       fs.rmSync(destDir, { recursive: true, force: true });
     }
 
-    // Copy directory recursively using native fs.cpSync (Node 16.7+)
-    fs.cpSync(srcPath, destDir, { recursive: true });
+    fs.cpSync(source, destDir, { recursive: true });
 
-    // Update config
     const pluginsConfig = this.configManager.get('plugins') || {};
     pluginsConfig[meta.id] = {
       id: meta.id,
@@ -73,14 +88,10 @@ class PluginSystem {
 
   uninstallPlugin(id) {
     const pluginsConfig = this.configManager.get('plugins') || {};
-    if (!pluginsConfig[id]) {
-      throw new Error(`Plugin "${id}" is not installed.`);
-    }
+    if (!pluginsConfig[id]) throw new Error(`Plugin "${id}" is not installed.`);
 
-    const destDir = path.join(this.pluginsDir, id);
-    if (fs.existsSync(destDir)) {
-      fs.rmSync(destDir, { recursive: true, force: true });
-    }
+    const destDir = this.getPluginDir(id);
+    if (fs.existsSync(destDir)) fs.rmSync(destDir, { recursive: true, force: true });
 
     delete pluginsConfig[id];
     this.configManager.set('plugins', pluginsConfig);
@@ -89,18 +100,16 @@ class PluginSystem {
 
   enablePlugin(id) {
     const pluginsConfig = this.configManager.get('plugins') || {};
-    if (!pluginsConfig[id]) {
-      throw new Error(`Plugin "${id}" is not installed.`);
-    }
+    if (!pluginsConfig[id]) throw new Error(`Plugin "${id}" is not installed.`);
+    this.getPluginDir(id);
     pluginsConfig[id].enabled = true;
     this.configManager.set('plugins', pluginsConfig);
   }
 
   disablePlugin(id) {
     const pluginsConfig = this.configManager.get('plugins') || {};
-    if (!pluginsConfig[id]) {
-      throw new Error(`Plugin "${id}" is not installed.`);
-    }
+    if (!pluginsConfig[id]) throw new Error(`Plugin "${id}" is not installed.`);
+    this.getPluginDir(id);
     pluginsConfig[id].enabled = false;
     this.configManager.set('plugins', pluginsConfig);
   }
@@ -118,11 +127,17 @@ class PluginSystem {
       const plugin = pluginsConfig[id];
       if (!plugin.enabled) return;
 
-      const pluginDir = path.join(this.pluginsDir, id);
-      const entryFile = path.resolve(pluginDir, plugin.main || 'index.js');
+      let pluginDir;
+      try {
+        pluginDir = this.getPluginDir(id);
+      } catch (err) {
+        console.error(`Error loading plugin "${id}": ${err.message}`);
+        return;
+      }
 
-      if (!fs.existsSync(entryFile)) {
-        console.warn(`Warning: Entry file "${entryFile}" for plugin "${id}" does not exist.`);
+      const entryFile = this.resolveInside(pluginDir, path.join(pluginDir, plugin.main || 'index.js'));
+      if (!entryFile || !fs.existsSync(entryFile) || !fs.statSync(entryFile).isFile()) {
+        console.warn(`Warning: Entry file for plugin "${id}" is missing or outside its plugin directory.`);
         return;
       }
 
