@@ -9,6 +9,10 @@ class BaseEcosystemAdapter {
     this.configKey = definition.configKey;
     this.envPrefix = definition.envPrefix;
     this.serviceName = definition.serviceName;
+    this.mode = definition.mode || 'daemon';
+    this.defaultCommand = definition.defaultCommand || null;
+    this.defaultArgs = definition.defaultArgs || [];
+    this.defaultVersionCommand = definition.defaultVersionCommand || null;
     this.ensureRegistered();
   }
 
@@ -18,21 +22,37 @@ class BaseEcosystemAdapter {
 
   resolveDefinition() {
     const configured = this.getConfiguredService();
-    const command = configured.command || process.env[`${this.envPrefix}_COMMAND`];
-    const args = Array.isArray(configured.args) ? configured.args : [];
+    const command = configured.command || process.env[`${this.envPrefix}_COMMAND`] || this.defaultCommand;
+    const args = Array.isArray(configured.args) ? configured.args : [...this.defaultArgs];
     const versionArgs = Array.isArray(configured.versionArgs) ? configured.versionArgs : [...args, '--version'];
+    const versionCommand = configured.versionCommand || this.defaultVersionCommand || command;
+    const versionCommandArgs = Array.isArray(configured.versionCommandArgs)
+      ? configured.versionCommandArgs
+      : (versionCommand === command ? versionArgs : []);
     const env = configured.env && typeof configured.env === 'object' ? configured.env : {};
     const workingDirectory = configured.workingDirectory || process.env[`${this.envPrefix}_WORKDIR`];
-    return { command, args, versionArgs, env, workingDirectory };
+    const mode = configured.mode || this.mode;
+    return { command, args, versionArgs, versionCommand, versionCommandArgs, env, workingDirectory, mode };
   }
 
   ensureRegistered() {
     const definition = this.resolveDefinition();
     const services = this.configManager.get('services') || {};
     const existing = services[this.serviceId];
-    if (existing && existing.command) return;
-    if (!definition.command) return;
-    this.serviceManager.registerService(this.serviceId, this.serviceName, definition.command, definition.args, definition.env, definition.workingDirectory, definition.versionArgs);
+    if (existing && (existing.command || existing.versionCommand)) return;
+    if (!definition.command && !definition.versionCommand) return;
+    this.serviceManager.registerService(
+      this.serviceId,
+      this.serviceName,
+      definition.command,
+      definition.args,
+      definition.env,
+      definition.workingDirectory,
+      definition.versionArgs,
+      definition.mode,
+      definition.versionCommand,
+      definition.versionCommandArgs
+    );
   }
 
   getService() {
@@ -41,9 +61,25 @@ class BaseEcosystemAdapter {
     return services[this.serviceId] || null;
   }
 
+  capabilities() {
+    return {
+      start: this.mode === 'daemon',
+      stop: this.mode === 'daemon',
+      restart: this.mode === 'daemon',
+      run: this.mode === 'oneshot',
+      version: true,
+      status: this.mode === 'daemon',
+      doctor: true,
+      config: true
+    };
+  }
+
   status() {
     const service = this.getService();
-    if (!service) return { id: this.serviceId, name: this.serviceName, status: 'not-found', pid: null, configured: false };
+    if (!service) return { id: this.serviceId, name: this.serviceName, status: 'not-configured', pid: null, configured: false };
+    if (service.mode !== 'daemon') {
+      return { id: this.serviceId, name: this.serviceName, status: 'on-demand', pid: null, configured: true, mode: service.mode };
+    }
     const found = this.serviceManager.listServices().find(item => item.id === this.serviceId);
     return found || { id: this.serviceId, name: this.serviceName, status: 'stopped', pid: null, configured: true };
   }
@@ -52,22 +88,24 @@ class BaseEcosystemAdapter {
     const service = this.getService();
     return {
       id: this.serviceId,
-      configured: Boolean(service && service.command),
-      command: service ? service.command : null,
-      workingDirectory: service ? service.workingDirectory || null : null
+      mode: service ? service.mode || this.mode : this.mode,
+      configured: Boolean(service && (service.command || service.versionCommand)),
+      command: service ? service.command || null : null,
+      workingDirectory: service ? service.workingDirectory || null : null,
+      versionCommand: service ? service.versionCommand || null : null
     };
   }
 
   isInstalled() {
-    return Boolean(this.getService());
+    const service = this.getService();
+    return Boolean(service && (service.command || service.versionCommand));
   }
 
   version() {
     const service = this.getService();
-    if (!service || !service.command) return { version: null, status: 'not-found' };
+    if (!service || !service.versionCommand) return { version: null, status: 'not-configured' };
     try {
-      const versionArgs = Array.isArray(service.versionArgs) ? service.versionArgs : [...(service.args || []), '--version'];
-      const output = child_process.execFileSync(service.command, versionArgs, {
+      const output = child_process.execFileSync(service.versionCommand, service.versionCommandArgs || [], {
         cwd: service.workingDirectory || undefined,
         env: { ...process.env, ...(service.env || {}) },
         encoding: 'utf8',
@@ -86,26 +124,42 @@ class BaseEcosystemAdapter {
     const version = this.version();
     const checks = [
       { name: `${this.serviceName} configured`, status: detection.configured ? 'PASS' : 'FAIL' },
-      { name: `${this.serviceName} process state`, status: status.status === 'running' ? 'PASS' : status.status === 'stopped' ? 'WARN' : 'FAIL' },
+      { name: `${this.serviceName} mode`, status: detection.configured ? 'PASS' : 'WARN' },
+      { name: `${this.serviceName} process state`, status: this.mode !== 'daemon' ? 'PASS' : status.status === 'running' ? 'PASS' : status.status === 'stopped' ? 'WARN' : 'FAIL' },
       { name: `${this.serviceName} version`, status: version.status === 'ok' ? 'PASS' : 'WARN' }
     ];
     const failed = checks.some(check => check.status === 'FAIL');
     const warned = checks.some(check => check.status === 'WARN');
-    return { status: failed ? 'unhealthy' : warned ? 'degraded' : 'healthy', checks, detection, version };
+    return { status: failed ? 'unhealthy' : warned ? 'degraded' : 'healthy', checks, detection, version, capabilities: this.capabilities() };
   }
 
   start() {
     this.ensureRegistered();
+    if (this.mode !== 'daemon') throw new Error(`${this.serviceName} is ${this.mode}-only; use its run operation instead of start/stop.`);
     return this.serviceManager.startService(this.serviceId);
   }
 
   stop() {
+    if (this.mode !== 'daemon') throw new Error(`${this.serviceName} is ${this.mode}-only and has no managed background process.`);
     return this.serviceManager.stopService(this.serviceId);
   }
 
   restart() {
+    if (this.mode !== 'daemon') throw new Error(`${this.serviceName} is ${this.mode}-only and cannot be restarted as a daemon.`);
     this.stop();
     return this.start();
+  }
+
+  run() {
+    const service = this.getService();
+    if (!service || !service.command) throw new Error(`${this.serviceName} has no executable command configured.`);
+    if (this.mode !== 'oneshot') throw new Error(`${this.serviceName} is not an on-demand service.`);
+    return child_process.spawnSync(service.command, [...(service.args || [])], {
+      cwd: service.workingDirectory || undefined,
+      env: { ...process.env, ...(service.env || {}) },
+      encoding: 'utf8',
+      shell: false
+    });
   }
 
   config(action, key, value) {
