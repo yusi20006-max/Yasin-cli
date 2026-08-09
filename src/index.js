@@ -14,10 +14,6 @@ const DiscoverCommand = require('./commands/discover');
 const HealthCommand = require('./commands/health');
 const LogsCommand = require('./commands/logs');
 
-const CoreAdapter = require('./adapters/CoreAdapter');
-const AgentAdapter = require('./adapters/AgentAdapter');
-const HubAdapter = require('./adapters/HubAdapter');
-const RelayAdapter = require('./adapters/RelayAdapter');
 const { createEcosystemAdapters } = require('./ecosystem');
 
 const CoreCommand = require('./commands/core');
