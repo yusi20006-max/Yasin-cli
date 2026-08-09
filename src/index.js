@@ -15,6 +15,7 @@ const HealthCommand = require('./commands/health');
 const LogsCommand = require('./commands/logs');
 const LifecycleCommand = require('./commands/lifecycle');
 const ProfileCommand = require('./commands/profile');
+const CreateCommand = require('./commands/create');
 
 const { createEcosystemAdapters } = require('./ecosystem');
 const EcosystemOrchestrator = require('./ecosystem/Orchestrator');
@@ -50,6 +51,7 @@ function bootstrap() {
     registry.register(new LifecycleCommand('stop', orchestrator));
     registry.register(new LifecycleCommand('restart', orchestrator));
     registry.register(new ProfileCommand(profileManager));
+    registry.register(new CreateCommand());
 
     registry.register(new CoreCommand(coreAdapter));
     registry.register(new AgentCommand(agentAdapter));
