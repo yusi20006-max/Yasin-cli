@@ -7,7 +7,6 @@ module.exports = [
       ecmaVersion: 2022,
       sourceType: "commonjs",
       globals: {
-        // Node environments and globals
         process: "readonly",
         __dirname: "readonly",
         require: "readonly",
@@ -15,10 +14,10 @@ module.exports = [
         console: "readonly",
         setInterval: "readonly",
         setTimeout: "readonly",
-        // Jest test framework globals
         jest: "readonly",
         describe: "readonly",
         it: "readonly",
+        test: "readonly",
         expect: "readonly",
         beforeEach: "readonly",
         afterEach: "readonly"
@@ -29,6 +28,7 @@ module.exports = [
       "no-useless-assignment": "off",
       "preserve-caught-error": "off",
       "no-empty": "off",
+      "no-useless-assignment": "off",
       "no-undef": "error"
     }
   }

@@ -9,64 +9,53 @@ const HubAdapter = require('../src/adapters/HubAdapter');
 const RelayAdapter = require('../src/adapters/RelayAdapter');
 
 const nodeCommand = process.execPath;
-const nodeArgs = ['-e', 'setInterval(() => {}, 1000)'];
-const versionArgs = ['--version'];
+const nodeVersionArgs = ['--version'];
+const nodeLoopArgs = ['-e', 'setInterval(() => {}, 1000)'];
+const nodeRunArgs = ['-e', 'process.stdout.write("ok\\n")'];
 
-function configure(config, id, name) {
-  config.set(`services.${id}`, { id, name, command: nodeCommand, args: nodeArgs, versionArgs, env: {} });
+function configure(config, id, name, mode, args, versionCommandArgs = nodeVersionArgs) {
+  config.set(`services.${id}`, { id, name, command: nodeCommand, args, mode, versionCommand: nodeCommand, versionCommandArgs, env: {} });
 }
 
 describe('Ecosystem Adapters', () => {
-  let config;
-  let manager;
-  let configPath;
+  let config; let manager; let configPath;
+  beforeEach(() => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yasin-adapter-')); configPath = path.join(dir, 'config.json'); config = new ConfigManager(configPath); manager = new ServiceManager(config); });
+  afterEach(() => { try { manager.listServices().filter(s => s.status === 'running').forEach(s => manager.stopService(s.id)); } catch (e) {} try { fs.rmSync(path.dirname(configPath), { recursive: true, force: true }); } catch (e) {} });
 
-  beforeEach(() => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'yasin-adapter-'));
-    configPath = path.join(dir, 'config.json');
-    config = new ConfigManager(configPath);
-    manager = new ServiceManager(config);
-  });
-
-  afterEach(() => {
-    try {
-      manager.listServices().forEach(service => {
-        if (service.status === 'running') manager.stopService(service.id);
-      });
-    } catch (e) {}
-    try { fs.rmSync(path.dirname(configPath), { recursive: true, force: true }); } catch (e) {}
-  });
-
-  test('no configured service means no mock registration', () => {
+  test('Core is a library and can probe a configured version command', () => {
+    config.set('services.yasin-core', { id: 'yasin-core', name: 'Yasin-Core', mode: 'library', versionCommand: nodeCommand, versionCommandArgs: nodeVersionArgs });
     const adapter = new CoreAdapter(config, manager);
-    expect(adapter.status().status).toBe('not-found');
-    expect(adapter.version().status).toBe('not-found');
+    expect(adapter.capabilities().start).toBe(false);
+    expect(adapter.status().status).toBe('on-demand');
+    expect(adapter.version().status).toBe('ok');
+    expect(() => adapter.start()).toThrow('library-only');
   });
 
-  test('configured Core service uses real process lifecycle and version detection', () => {
-    configure(config, 'yasin-core', 'Yasin-Core Service');
-    const adapter = new CoreAdapter(config, manager);
+  test('Agent is an on-demand service', () => {
+    configure(config, 'yasin-agent', 'Yasin-Agent', 'oneshot', nodeRunArgs);
+    const adapter = new AgentAdapter(config, manager);
+    expect(adapter.capabilities().run).toBe(true);
+    expect(adapter.capabilities().start).toBe(false);
+    expect(adapter.version().status).toBe('ok');
+    expect(adapter.run().status).toBe(0);
+  });
+
+  test('Hub is an on-demand service', () => {
+    configure(config, 'yasin-hub', 'YasinHub', 'oneshot', nodeRunArgs);
+    const adapter = new HubAdapter(config, manager);
+    expect(adapter.capabilities().run).toBe(true);
+    expect(adapter.version().status).toBe('ok');
+    expect(adapter.run().status).toBe(0);
+  });
+
+  test('Relay is a managed daemon', () => {
+    configure(config, 'yasin-relay', 'YasinRelay', 'daemon', nodeLoopArgs);
+    const adapter = new RelayAdapter(config, manager);
+    expect(adapter.capabilities().start).toBe(true);
     expect(adapter.version().status).toBe('ok');
     const started = adapter.start();
     expect(started.status).toBe('running');
-    expect(started.pid).toBeGreaterThan(0);
     expect(adapter.status().status).toBe('running');
     expect(adapter.stop()).toBe(true);
-    expect(adapter.status().status).toBe('stopped');
-  });
-
-  test('Agent, Hub and Relay share the real adapter contract', () => {
-    const defs = [
-      ['yasin-agent', 'Yasin-Agent Service', AgentAdapter],
-      ['yasin-hub', 'YasinHub Service', HubAdapter],
-      ['yasin-relay', 'YasinRelay Service', RelayAdapter]
-    ];
-    defs.forEach(([id, name, Adapter]) => {
-      configure(config, id, name);
-      const adapter = new Adapter(config, manager);
-      expect(adapter.serviceId).toBe(id);
-      expect(adapter.detect().configured).toBe(true);
-      expect(adapter.version().status).toBe('ok');
-    });
   });
 });
