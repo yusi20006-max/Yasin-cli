@@ -47,3 +47,6 @@ jobs:
 
       - name: Production dependency audit
         run: npm audit --omit=dev --audit-level=high
+
+      # CI trigger marker: this workflow is intentionally updated through the PR branch.
+      # The matrix above is the authoritative 3 OS × 3 Node validation gate.
