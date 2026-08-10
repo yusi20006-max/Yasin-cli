@@ -20,7 +20,7 @@ registry.register(new HealthCommand(healthOperation));
 assert.strictEqual(registry.getCommand('discover').name, 'discover');
 assert.strictEqual(registry.getCommand('health').name, 'health');
 
-const result = registry.execute('health', ['yasin-core'], { json: true });
+const result = registry.getCommand('health').execute(['yasin-core'], { json: true });
 assert.strictEqual(result.ok, true);
 assert.strictEqual(result.data.healthy, true);
 assert.strictEqual(result.data.results[0].service, 'yasin-core');
