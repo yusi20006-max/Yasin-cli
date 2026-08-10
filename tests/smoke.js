@@ -12,5 +12,5 @@ registry.register(new DiscoverCommand(adapters));
 registry.register(new HealthCommand(adapters));
 assert.strictEqual(registry.getCommand('discover').name, 'discover');
 assert.strictEqual(registry.getCommand('health').name, 'health');
-assert.strictEqual(new HealthCommand(adapters).execute().healthy, true);
+assert.strictEqual(new HealthCommand(adapters).execute().data.healthy, true);
 console.log('YasinCLI smoke check passed.');
