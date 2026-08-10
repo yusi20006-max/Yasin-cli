@@ -2,22 +2,21 @@ const Command = require('../core/Command');
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
+const AutomationResult = require('../output/AutomationResult');
 
 class StatusCommand extends Command {
   constructor(configManager, serviceManager = null, pluginSystem = null) {
     super({
       name: 'status',
-      description: 'Show current CLI status, running services, loaded plugins, and system resources'
+      description: 'Show current CLI status, running services, loaded plugins, and system resources',
+      supportsJson: true
     });
     this.configManager = configManager;
     this.serviceManager = serviceManager;
     this.pluginSystem = pluginSystem;
   }
 
-  execute(args, options) {
-    console.log('=== Yasin CLI Status ===\n');
-
-    // 1. CLI Metadata
+  getVersion() {
     let version = '1.0.0';
     try {
       const pkgPath = path.join(__dirname, '..', '..', 'package.json');
@@ -26,73 +25,112 @@ class StatusCommand extends Command {
         version = pkg.version || version;
       }
     } catch (e) {
-      // ignore
+      // Keep the fallback version when package metadata is unavailable.
     }
+    return version;
+  }
 
-    console.log(`CLI Version:       v${version}`);
-    console.log(`Config Directory:  ${this.configManager.configDir}`);
-    console.log(`Config File:       ${this.configManager.configPath}`);
-    console.log();
-
-    // 2. System Resource Usage
-    console.log('--- System Resources ---');
-    const uptimeSec = os.uptime();
-    const uptimeStr = this.formatUptime(uptimeSec);
-    console.log(`OS Uptime:         ${uptimeStr}`);
-
-    const freeMemGb = (os.freemem() / (1024 ** 3)).toFixed(2);
-    const totalMemGb = (os.totalmem() / (1024 ** 3)).toFixed(2);
-    console.log(`System Memory:     ${freeMemGb} GB free / ${totalMemGb} GB total`);
-
-    const processHeapMb = (process.memoryUsage().heapUsed / (1024 ** 2)).toFixed(2);
-    console.log(`CLI Process Memory:${processHeapMb} MB heap used`);
-
+  collectStatus() {
+    const services = this.serviceManager && this.serviceManager.listServices
+      ? this.serviceManager.listServices()
+      : [];
+    const plugins = this.pluginSystem && this.pluginSystem.listPlugins
+      ? this.pluginSystem.listPlugins()
+      : [];
     const cpus = os.cpus();
-    console.log(`CPU Cores:         ${cpus.length}x ${cpus[0] ? cpus[0].model : 'Unknown'}`);
 
-    if (process.platform !== 'win32') {
-      const load = os.loadavg();
-      console.log(`System Load (Avg): ${load[0].toFixed(2)}, ${load[1].toFixed(2)}, ${load[2].toFixed(2)}`);
+    return {
+      cli: {
+        version: this.getVersion(),
+        configDirectory: this.configManager.configDir,
+        configFile: this.configManager.configPath
+      },
+      system: {
+        platform: process.platform,
+        arch: process.arch,
+        uptimeSeconds: os.uptime(),
+        uptime: this.formatUptime(os.uptime()),
+        memory: {
+          freeBytes: os.freemem(),
+          totalBytes: os.totalmem(),
+          freeGb: Number((os.freemem() / (1024 ** 3)).toFixed(2)),
+          totalGb: Number((os.totalmem() / (1024 ** 3)).toFixed(2)),
+          cliHeapUsedBytes: process.memoryUsage().heapUsed
+        },
+        cpu: {
+          cores: cpus.length,
+          model: cpus[0] ? cpus[0].model : 'Unknown'
+        },
+        loadAverage: process.platform === 'win32' ? null : os.loadavg()
+      },
+      services: {
+        initialized: Boolean(this.serviceManager),
+        total: services.length,
+        running: services.filter(s => s.status === 'running').length,
+        items: services
+      },
+      plugins: {
+        initialized: Boolean(this.pluginSystem),
+        total: plugins.length,
+        enabled: plugins.filter(p => p.enabled).length,
+        items: plugins
+      }
+    };
+  }
+
+  execute(args, options = {}) {
+    const data = this.collectStatus();
+    const result = AutomationResult.success(data);
+
+    if (options.json) {
+      return result;
+    }
+
+    console.log('=== Yasin CLI Status ===\n');
+    console.log(`CLI Version:       v${data.cli.version}`);
+    console.log(`Config Directory:  ${data.cli.configDirectory}`);
+    console.log(`Config File:       ${data.cli.configFile}`);
+    console.log();
+
+    console.log('--- System Resources ---');
+    console.log(`OS Uptime:         ${data.system.uptime}`);
+    console.log(`System Memory:     ${data.system.memory.freeGb.toFixed(2)} GB free / ${data.system.memory.totalGb.toFixed(2)} GB total`);
+    console.log(`CLI Process Memory:${(data.system.memory.cliHeapUsedBytes / (1024 ** 2)).toFixed(2)} MB heap used`);
+    console.log(`CPU Cores:         ${data.system.cpu.cores}x ${data.system.cpu.model}`);
+    if (data.system.loadAverage) {
+      console.log(`System Load (Avg): ${data.system.loadAverage.map(v => v.toFixed(2)).join(', ')}`);
     }
     console.log();
 
-    // 3. Active Services
     console.log('--- Managed Services ---');
-    if (this.serviceManager) {
-      const services = this.serviceManager.listServices ? this.serviceManager.listServices() : [];
-      const runningServices = services.filter(s => s.status === 'running');
-      if (services.length === 0) {
-        console.log('No services registered.');
-      } else {
-        console.log(`Total registered:  ${services.length}`);
-        console.log(`Running:           ${runningServices.length}`);
-        services.forEach(s => {
-          console.log(`  - [${s.status.toUpperCase()}] ${s.id} (PID: ${s.pid || 'N/A'})`);
-        });
-      }
-    } else {
+    if (!data.services.initialized) {
       console.log('Service Manager not initialized.');
+    } else if (data.services.total === 0) {
+      console.log('No services registered.');
+    } else {
+      console.log(`Total registered:  ${data.services.total}`);
+      console.log(`Running:           ${data.services.running}`);
+      data.services.items.forEach(s => {
+        console.log(`  - [${s.status.toUpperCase()}] ${s.id} (PID: ${s.pid || 'N/A'})`);
+      });
     }
     console.log();
 
-    // 4. Loaded Plugins
     console.log('--- Active Plugins ---');
-    if (this.pluginSystem) {
-      const plugins = this.pluginSystem.listPlugins ? this.pluginSystem.listPlugins() : [];
-      const enabledPlugins = plugins.filter(p => p.enabled);
-      if (plugins.length === 0) {
-        console.log('No plugins installed.');
-      } else {
-        console.log(`Total installed:   ${plugins.length}`);
-        console.log(`Enabled:           ${enabledPlugins.length}`);
-        plugins.forEach(p => {
-          const statusStr = p.enabled ? 'ENABLED' : 'DISABLED';
-          console.log(`  - [${statusStr}] ${p.id} v${p.version || '1.0.0'}`);
-        });
-      }
-    } else {
+    if (!data.plugins.initialized) {
       console.log('Plugin System not initialized.');
+    } else if (data.plugins.total === 0) {
+      console.log('No plugins installed.');
+    } else {
+      console.log(`Total installed:   ${data.plugins.total}`);
+      console.log(`Enabled:           ${data.plugins.enabled}`);
+      data.plugins.items.forEach(p => {
+        const statusStr = p.enabled ? 'ENABLED' : 'DISABLED';
+        console.log(`  - [${statusStr}] ${p.id} v${p.version || '1.0.0'}`);
+      });
     }
+
+    return result;
   }
 
   formatUptime(sec) {
