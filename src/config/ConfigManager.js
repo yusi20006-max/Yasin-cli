@@ -85,7 +85,9 @@ class ConfigManager {
       if (current[part] === undefined || typeof current[part] !== 'object') return false;
       current = current[part];
     }
-    delete current[parts[parts.length - 1]];
+    const finalKey = parts[parts.length - 1];
+    if (!Object.prototype.hasOwnProperty.call(current, finalKey)) return false;
+    delete current[finalKey];
     this.saveConfig(this.config);
     return true;
   }
