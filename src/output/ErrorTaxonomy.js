@@ -25,6 +25,10 @@ const TYPE_TO_CODE = Object.freeze({
 function classify(error, fallbackType = ErrorTypes.GENERAL) {
   if (!error) return fallbackType;
   if (error.type && Object.values(ErrorTypes).includes(error.type)) return error.type;
+
+  const codeToType = Object.entries(TYPE_TO_CODE).find(([, code]) => code === error.code);
+  if (codeToType) return codeToType[0];
+
   if (error.code === 'ENOENT' || error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
     return ErrorTypes.SERVICE_UNAVAILABLE;
   }
