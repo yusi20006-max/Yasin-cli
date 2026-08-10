@@ -22,9 +22,13 @@ describe('automation subprocess contract', () => {
     expect(result.status).toBe(2);
   });
 
-  test('unsupported JSON mode returns stable invalid-command exit code', () => {
+  test('unsupported JSON mode returns stable invalid-command JSON contract', () => {
     const result = run('config', '--json');
     expect(result.status).toBe(2);
-    expect(result.stderr).toContain('does not support --json');
+    const payload = JSON.parse(result.stdout);
+    expect(payload.ok).toBe(false);
+    expect(payload.code).toBe(2);
+    expect(payload.error.type).toBe('INVALID_COMMAND');
+    expect(payload.error.message).toContain('does not support --json');
   });
 });
