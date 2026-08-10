@@ -2,7 +2,7 @@ const Command = require('../core/Command');
 const AutomationResult = require('../output/AutomationResult');
 
 class LifecycleCommand extends Command {
-  constructor(action, adapters) {
+  constructor(action, target) {
     super({
       name: action,
       description: `${action} Yasin ecosystem services`,
@@ -10,38 +10,44 @@ class LifecycleCommand extends Command {
       supportsJson: true
     });
     this.action = action;
-    this.adapters = adapters || [];
+    this.orchestrator = Array.isArray(target) ? null : target;
+    this.adapters = Array.isArray(target) ? target : (target && target.adapters) || [];
   }
 
   execute(args, options = {}) {
     const target = args[0] || 'all';
-    const adapter = target === 'all'
-      ? null
-      : this.adapters.find(item => item.serviceId === target);
+    let payload;
 
-    if (target !== 'all' && !adapter) {
-      throw new Error(`Unknown ecosystem service: ${target}`);
+    if (this.orchestrator && typeof this.orchestrator[this.action] === 'function') {
+      payload = this.orchestrator[this.action](target);
+    } else {
+      const adapter = target === 'all'
+        ? null
+        : this.adapters.find(item => item.serviceId === target || item.serviceId === `yasin-${target}`);
+
+      if (target !== 'all' && !adapter) {
+        throw new Error(`Unknown ecosystem service: ${target}`);
+      }
+
+      const selected = adapter ? [adapter] : this.adapters;
+      const services = selected.map(item => {
+        const capabilities = typeof item.capabilities === 'function' ? item.capabilities() : {};
+        if (!capabilities[this.action]) {
+          return { id: item.serviceId, status: 'skipped', reason: `Unsupported action: ${this.action}` };
+        }
+
+        try {
+          const value = typeof item[this.action] === 'function' ? item[this.action]() : undefined;
+          return { id: item.serviceId, status: 'ok', ...(value && typeof value === 'object' ? value : {}) };
+        } catch (error) {
+          return { id: item.serviceId, status: 'error', error: { message: error.message } };
+        }
+      });
+
+      payload = { action: this.action, services };
     }
 
-    const selected = adapter ? [adapter] : this.adapters;
-    const services = selected.map(item => {
-      const capabilities = typeof item.capabilities === 'function' ? item.capabilities() : {};
-      if (!capabilities[this.action]) {
-        return { id: item.serviceId, status: 'skipped', reason: `Unsupported action: ${this.action}` };
-      }
-
-      try {
-        const value = typeof item[this.action] === 'function'
-          ? item[this.action]()
-          : undefined;
-        return { id: item.serviceId, status: 'ok', ...(value && typeof value === 'object' ? value : {}) };
-      } catch (error) {
-        return { id: item.serviceId, status: 'error', error: { message: error.message } };
-      }
-    });
-
-    const failed = services.some(item => item.status === 'error');
-    const payload = { services };
+    const failed = payload.services && payload.services.some(item => item.status === 'error');
     const result = failed
       ? AutomationResult.failure(4, `${this.action} failed for one or more services`, payload)
       : AutomationResult.success(payload);
