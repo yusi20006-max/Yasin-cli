@@ -8,6 +8,7 @@ const ServiceResolver = require('./core/ServiceResolver');
 const ServiceOperation = require('./core/ServiceOperation');
 const ServiceHealthOperation = require('./core/ServiceHealthOperation');
 const ServiceStatusOperation = require('./core/ServiceStatusOperation');
+const { normalize } = require('./output/ErrorTaxonomy');
 
 const ConfigCommand = require('./commands/config');
 const DoctorCommand = require('./commands/doctor');
@@ -74,8 +75,9 @@ function bootstrap() {
     const args = process.argv.slice(2);
     return registry.dispatch(args);
   } catch (err) {
-    console.error('Fatal Error during Yasin CLI bootstrap:', err.message);
-    process.exit(1);
+    const normalized = normalize(err);
+    console.error('Fatal Error during Yasin CLI bootstrap:', normalized.message);
+    process.exit(normalized.code);
   }
 }
 
