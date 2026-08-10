@@ -1,0 +1,40 @@
+name: Cross-Platform Validation
+
+on:
+  push:
+    branches: ["phase-4.5.1-reconciliation-automation"]
+  pull_request:
+    branches: ["phase-4.5.1-reconciliation-automation"]
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: ${{ matrix.os }} / Node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: [18, 20, 22]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Smoke test
+        run: npm run smoke
