@@ -16,9 +16,9 @@ class ServiceHealthOperation {
 
     const adapters = this.resolver.resolve(service);
     const results = adapters.map(adapter => {
-      const method = operation === 'doctor' && typeof adapter.doctor === 'function'
-        ? adapter.doctor
-        : adapter.health;
+      const method = operation === 'doctor'
+        ? (typeof adapter.doctor === 'function' ? adapter.doctor : adapter.health)
+        : (typeof adapter.health === 'function' ? adapter.health : adapter.doctor);
       if (typeof method !== 'function') {
         return { service: adapter.serviceId, status: 'unsupported' };
       }
