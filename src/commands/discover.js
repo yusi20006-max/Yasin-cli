@@ -1,15 +1,25 @@
 const Command = require('../core/Command');
+const AutomationResult = require('../output/AutomationResult');
 
 class DiscoverCommand extends Command {
   constructor(adapters) {
-    super({ name: 'discover', description: 'Discover installed Yasin ecosystem services' });
+    super({
+      name: 'discover',
+      description: 'Discover installed Yasin ecosystem services',
+      supportsJson: true
+    });
     this.adapters = adapters;
   }
 
-  execute() {
+  execute(args, options = {}) {
     const services = this.adapters.map((adapter) => adapter.detect());
-    console.log(JSON.stringify({ services }, null, 2));
-    return { services };
+    const result = AutomationResult.success({ services });
+
+    if (!options.json) {
+      console.log(JSON.stringify(result.data, null, 2));
+    }
+
+    return result;
   }
 }
 
