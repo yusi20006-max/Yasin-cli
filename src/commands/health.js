@@ -2,24 +2,40 @@ const Command = require('../core/Command');
 const AutomationResult = require('../output/AutomationResult');
 
 class HealthCommand extends Command {
-  constructor(adapters) {
+  constructor(adaptersOrOperation) {
     super({
       name: 'health',
       description: 'Check health of Yasin ecosystem services',
       supportsJson: true
     });
-    this.adapters = adapters;
+    this.adaptersOrOperation = adaptersOrOperation;
   }
 
   execute(args, options = {}) {
-    const services = this.adapters.map((adapter) => adapter.doctor());
-    const healthy = services.every((result) => result.status === 'healthy');
-    const result = AutomationResult.success({ healthy, services });
+    const operation = this.adaptersOrOperation && typeof this.adaptersOrOperation.execute === 'function'
+      ? this.adaptersOrOperation
+      : null;
+
+    let result;
+    if (operation) {
+      result = operation.execute('health', args[0] || 'all', args.slice(1), options);
+    } else {
+      const adapters = Array.isArray(this.adaptersOrOperation) ? this.adaptersOrOperation : [];
+      const services = adapters.map((adapter) => {
+        try {
+          const value = typeof adapter.health === 'function' ? adapter.health(args.slice(1), options) : adapter.doctor();
+          return { service: adapter.serviceId, status: 'ok', data: value };
+        } catch (error) {
+          return { service: adapter.serviceId, status: 'error', error: { message: error.message } };
+        }
+      });
+      const healthy = services.every((item) => item.status === 'ok');
+      result = AutomationResult.success({ healthy, services });
+    }
 
     if (!options.json) {
       console.log(JSON.stringify(result.data, null, 2));
     }
-
     return result;
   }
 }
