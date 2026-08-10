@@ -23,7 +23,7 @@ describe('automation subprocess contract', () => {
   });
 
   test('unsupported JSON mode returns stable invalid-command JSON contract', () => {
-    const result = run('config', '--json');
+    const result = run('create', '--json');
     expect(result.status).toBe(2);
     const payload = JSON.parse(result.stdout);
     expect(payload.ok).toBe(false);
