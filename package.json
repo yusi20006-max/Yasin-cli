@@ -1,29 +1,47 @@
 {
   "name": "yasin-cli",
   "version": "1.0.0",
-  "description": "Yasin CLI is a modular, extensible command line interface tool.",
+  "description": "Unified command-line control plane for the Yasin ecosystem.",
   "main": "src/index.js",
   "bin": {
     "yasin": "./bin/yasin.js"
   },
+  "files": [
+    "src/",
+    "bin/",
+    "yasin.sh",
+    "README.md",
+    "LICENSE",
+    "docs/"
+  ],
   "scripts": {
     "test": "jest",
     "lint": "eslint src tests bin",
-    "smoke": "node tests/smoke.js"
+    "smoke": "node tests/smoke.js",
+    "pack:check": "npm pack --dry-run",
+    "release:check": "npm test && npm run lint && npm run smoke && npm run pack:check && npm audit --omit=dev"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/yusi20006-max/Yasin-cli.git"
   },
+  "bugs": {
+    "url": "https://github.com/yusi20006-max/Yasin-cli/issues"
+  },
+  "homepage": "https://github.com/yusi20006-max/Yasin-cli#readme",
   "keywords": [
     "cli",
     "yasin",
-    "extensible",
-    "service-manager"
+    "ecosystem",
+    "service-manager",
+    "automation"
   ],
-  "author": "",
+  "author": "yusi20006-max",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.8.0",
