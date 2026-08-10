@@ -46,47 +46,50 @@ class CommandRegistry {
     }
 
     const commandRawArgs = [...rawArgs.slice(0, cmdIndex), ...rawArgs.slice(cmdIndex + 1)];
-    const parsed = command.parse(commandRawArgs);
 
-    if (parsed.options.json && !command.supportsJson) {
-      const error = new Error(`Command "${cmdName}" does not support --json yet.`);
-      error.type = 'INVALID_COMMAND';
-      this.handleError(cmdName, error, parsed.options);
-      return;
-    }
-    if (parsed.options.help || parsed.options.h) {
-      this.printCommandHelp(command);
-      process.exit(ExitCodes.SUCCESS);
-      return;
-    }
+    try {
+      const parsed = command.parse(commandRawArgs);
 
-    const commandArgsDef = command.args || [];
-    for (let i = 0; i < commandArgsDef.length; i++) {
-      const argDef = commandArgsDef[i];
-      if (argDef.required && (parsed.args[i] === undefined || parsed.args[i] === '')) {
-        const error = new Error(`Missing required argument <${argDef.name}>.`);
+      if (parsed.options.json && !command.supportsJson) {
+        const error = new Error(`Command "${cmdName}" does not support --json yet.`);
         error.type = 'INVALID_COMMAND';
         this.handleError(cmdName, error, parsed.options);
         return;
       }
-    }
+      if (parsed.options.help || parsed.options.h) {
+        this.printCommandHelp(command);
+        process.exit(ExitCodes.SUCCESS);
+        return;
+      }
 
-    try {
+      const commandArgsDef = command.args || [];
+      for (let i = 0; i < commandArgsDef.length; i++) {
+        const argDef = commandArgsDef[i];
+        if (argDef.required && (parsed.args[i] === undefined || parsed.args[i] === '')) {
+          const error = new Error(`Missing required argument <${argDef.name}>.`);
+          error.type = 'INVALID_COMMAND';
+          this.handleError(cmdName, error, parsed.options);
+          return;
+        }
+      }
+
       const result = command.execute(parsed.args, parsed.options);
       if (result && typeof result.then === 'function') {
         return result.then(res => this.handleResult(res, parsed.options)).catch(err => this.handleError(cmdName, err, parsed.options));
       }
       return this.handleResult(result, parsed.options);
     } catch (err) {
-      this.handleError(cmdName, err, parsed.options);
+      const requestedJson = rawArgs.includes('--json');
+      this.handleError(cmdName, err, { json: requestedJson });
     }
   }
 
   handleResult(result, options = {}) {
-    if (!options.json) return result;
     const payload = result === undefined ? { ok: true, code: ExitCodes.SUCCESS, data: null } : result;
-    console.log(OutputFormatter.json(payload));
-    if (payload && Number.isInteger(payload.code) && payload.code !== ExitCodes.SUCCESS) process.exit(payload.code);
+    if (options.json) console.log(OutputFormatter.json(payload));
+    if (payload?.ok === false && Number.isInteger(payload.code) && payload.code !== ExitCodes.SUCCESS) {
+      process.exit(payload.code);
+    }
     return result;
   }
 
