@@ -1,134 +1,114 @@
 # Yasin CLI
 
-Yasin CLI is a modular, extensible, and high-performance Command Line Interface tool built on Node.js. It is designed to work seamlessly across Termux (Android), Linux, macOS, and Windows.
-
-## Key Features
-
-1. **Configuration Management System**: Unified management of CLI preferences and settings using hierarchical JSON files supporting dot-notation keys (e.g., `yasin config set general.theme dark`).
-2. **Core CLI Framework & Command Registry**: Custom, lightweight, and zero-dependency argument and option parser supporting global help, command-specific usage flags, and dynamic subcommand dispatching.
-3. **Doctor Command**: Environment diagnostics engine checking platform compatibility, directory permissions (write/read access to configuration and plugin directories), Node.js versions, and critical external dependencies like Git. Includes auto-healing capabilities.
-4. **Status Command**: Real-time monitoring showing CLI configuration paths, active processes, system resource metrics (uptime, memory, CPU load), and loaded modules.
-5. **Service Manager**: Cross-platform background daemon/process manager designed to spawn, stop, monitor, list, and view logs of long-running tasks.
-6. **Plugin System**: Dynamic loading framework allowing custom extensions to register new commands during application startup, with built-in actions to install, list, enable, disable, and uninstall plugins.
+Yasin CLI is a modular, extensible, and cross-platform Command Line Interface for the Yasin ecosystem. It is designed for Termux (Android), Linux, macOS, and Windows.
 
 ## Architecture
 
-The project has a highly modular architecture separated into distinct layers:
+The CLI is split into command, service, and ecosystem layers:
 
-```
+```text
+CLI entrypoint
+├── bin/yasin.js          # canonical cross-platform Node launcher
+└── yasin.sh              # legacy Unix wrapper → bin/yasin.js
+
 src/
-├── index.js             # Main bootstrap and orchestration entry point
-├── config/
-│   └── ConfigManager.js # Config management core (XDG, AppData, dot-notation resolution)
+├── index.js              # bootstrap and command registration
 ├── core/
-│   ├── Command.js       # Base Command class & Custom CLI Argument/Option Parser
-│   └── CommandRegistry.js # Dispatcher & dynamic Help menu generator
+│   ├── Command.js
+│   ├── CommandRegistry.js
+│   ├── ServiceResolver.js
+│   ├── ServiceOperation.js
+│   ├── ServiceStatusOperation.js
+│   ├── ServiceHealthOperation.js
+│   └── ServiceCommandFactory.js
 ├── commands/
-│   ├── config.js        # Config CLI subcommand
-│   ├── doctor.js        # Doctor health check & auto-healing implementation
-│   ├── status.js        # Resource monitoring and meta status report
-│   ├── service.js       # Background process manager subcommands
-│   └── plugin.js        # Plugin installer and state toggler subcommands
+│   ├── config.js
+│   ├── doctor.js
+│   ├── status.js
+│   ├── health.js
+│   ├── lifecycle.js      # start / stop / restart
+│   ├── service.js
+│   ├── plugin.js
+│   └── logs.js
 ├── services/
-│   └── ServiceManager.js # Process spawn, track, log, and kill logic
+│   └── ServiceManager.js
 └── plugins/
-    └── PluginSystem.js  # Plugin scanner, dynamic loader, and registry hook
+    └── PluginSystem.js
 ```
+
+### Unified ecosystem operation path
+
+Ecosystem operations use a canonical resolver boundary:
+
+```text
+Command
+  ↓
+ServiceOperation / ServiceStatusOperation / ServiceHealthOperation
+  ↓
+ServiceResolver
+  ↓
+Canonical service adapter
+```
+
+`status`, `health`, and `doctor` intentionally keep distinct semantics: status is a snapshot, health reports runtime service health, and doctor performs CLI/environment diagnostics.
 
 ## Installation
 
-Run the installation script to configure permissions and install all required development packages:
-
 ```bash
-./install.sh
+npm install
 ```
 
-## CLI Usage
-
-Run help to inspect available commands and global flags:
+For a local checkout on Unix systems, the legacy launcher remains available:
 
 ```bash
 ./yasin.sh --help
 ```
 
-### 1. Configuration (`config`)
-Read, write, list, or delete hierarchical settings:
+The canonical npm executable is:
+
 ```bash
-# Get a configuration parameter
-./yasin.sh config get general.theme
-
-# Set a configuration parameter
-./yasin.sh config set general.theme ocean
-./yasin.sh config set services.web.port 8080
-
-# List entire configuration
-./yasin.sh config list
-
-# Delete a configuration parameter
-./yasin.sh config delete general.theme
+yasin --help
 ```
 
-### 2. Diagnostics (`doctor`)
-Perform environment sanity checks and auto-heal missing configurations:
-```bash
-# Perform checks
-./yasin.sh doctor
+The npm launcher is implemented in Node.js so the same entrypoint works across Linux, macOS, Windows, and Termux.
 
-# Auto-heal fixable directories
-./yasin.sh doctor --fix
+## CLI Usage
+
+```bash
+yasin config list
+yasin status
+yasin health
+yasin doctor
+yasin start all
+yasin stop all
+yasin restart yasin-relay
+yasin logs yasin-relay
 ```
 
-### 3. CLI Status (`status`)
-Inspect system resources, CLI meta-attributes, and running services:
-```bash
-./yasin.sh status
+## Validation
+
+The repository includes unit, integration, launcher, smoke, and cross-platform validation. The cross-platform workflow targets Linux, Windows, and macOS with Node.js 18, 20, and 22 and runs:
+
+```text
+npm ci
+npm run lint
+npm test
+npm run smoke
 ```
 
-### 4. Background Services (`service`)
-Spawn, monitor, and manage long-running background tasks:
-```bash
-# Register a custom service
-./yasin.sh service register my-api "Mock API" node -e "setInterval(() => console.log('Ping...'), 5000);"
-
-# Start the service in background
-./yasin.sh service start my-api
-
-# List registered services and active statuses
-./yasin.sh service list
-
-# View service logs
-./yasin.sh service logs my-api -n 20
-
-# Restart or stop the service
-./yasin.sh service restart my-api
-./yasin.sh service stop my-api
-
-# Unregister service
-./yasin.sh service unregister my-api
-```
-
-### 5. Extension Plugins (`plugin`)
-Extend CLI capabilities dynamically by installing extension folders:
-```bash
-# Install local plugin directory
-./yasin.sh plugin install /path/to/custom-plugin
-
-# List installed plugins
-./yasin.sh plugin list
-
-# Enable or disable plugins
-./yasin.sh plugin disable custom-plugin
-./yasin.sh plugin enable custom-plugin
-
-# Uninstall plugin
-./yasin.sh plugin uninstall custom-plugin
-```
+See `docs/cross-platform-validation.md` for the validation contract.
 
 ## Test Suite
 
-The test suite contains thorough unit and integration tests written in Jest, achieving complete coverage over all core behaviors and commands.
+Run all tests with:
 
-Run all tests:
 ```bash
 npm test
+```
+
+Run linting and smoke validation with:
+
+```bash
+npm run lint
+npm run smoke
 ```
