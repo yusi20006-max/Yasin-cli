@@ -17,14 +17,11 @@ class LifecycleCommand extends Command {
     const service = args[0] || 'all';
     let result;
 
-    // Canonical path: ServiceOperation / another unified operation backend.
     if (this.target && !Array.isArray(this.target) && typeof this.target.execute === 'function') {
       result = this.target.execute(this.action, service, args.slice(1), options);
     } else if (this.target && !Array.isArray(this.target) && typeof this.target[this.action] === 'function') {
       result = AutomationResult.success(this.target[this.action](service));
     } else if (Array.isArray(this.target)) {
-      // Backward-compatible adapter path retained for callers/tests that inject
-      // adapters directly. The canonical bootstrap no longer uses this path.
       const adapters = service === 'all'
         ? this.target
         : this.target.filter(adapter => adapter.serviceId === service);
@@ -52,10 +49,6 @@ class LifecycleCommand extends Command {
 
     if (!result || typeof result !== 'object' || typeof result.ok !== 'boolean') {
       result = AutomationResult.success(result);
-    }
-
-    if (!options.json) {
-      console.log(JSON.stringify(result.data, null, 2));
     }
 
     return result;
