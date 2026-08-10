@@ -10,50 +10,28 @@ class LifecycleCommand extends Command {
       supportsJson: true
     });
     this.action = action;
-    this.orchestrator = Array.isArray(target) ? null : target;
-    this.adapters = Array.isArray(target) ? target : (target && target.adapters) || [];
+    this.target = target;
   }
 
   execute(args, options = {}) {
-    const target = args[0] || 'all';
-    let payload;
+    const service = args[0] || 'all';
+    let result;
 
-    if (this.orchestrator && typeof this.orchestrator[this.action] === 'function') {
-      payload = this.orchestrator[this.action](target);
+    if (this.target && typeof this.target.execute === 'function') {
+      result = this.target.execute(this.action, service, [], options);
+    } else if (this.target && typeof this.target[this.action] === 'function') {
+      const data = this.target[this.action](service);
+      result = AutomationResult.success(data);
     } else {
-      const adapter = target === 'all'
-        ? null
-        : this.adapters.find(item => item.serviceId === target || item.serviceId === `yasin-${target}`);
-
-      if (target !== 'all' && !adapter) {
-        throw new Error(`Unknown ecosystem service: ${target}`);
-      }
-
-      const selected = adapter ? [adapter] : this.adapters;
-      const services = selected.map(item => {
-        const capabilities = typeof item.capabilities === 'function' ? item.capabilities() : {};
-        if (!capabilities[this.action]) {
-          return { id: item.serviceId, status: 'skipped', reason: `Unsupported action: ${this.action}` };
-        }
-
-        try {
-          const value = typeof item[this.action] === 'function' ? item[this.action]() : undefined;
-          return { id: item.serviceId, status: 'ok', ...(value && typeof value === 'object' ? value : {}) };
-        } catch (error) {
-          return { id: item.serviceId, status: 'error', error: { message: error.message } };
-        }
-      });
-
-      payload = { action: this.action, services };
+      throw new Error(`No service operation backend configured for ${this.action}`);
     }
 
-    const failed = payload.services && payload.services.some(item => item.status === 'error');
-    const result = failed
-      ? AutomationResult.failure(4, `${this.action} failed for one or more services`, payload)
-      : AutomationResult.success(payload);
+    if (!result || typeof result !== 'object' || typeof result.ok !== 'boolean') {
+      result = AutomationResult.success(result);
+    }
 
     if (!options.json) {
-      console.log(JSON.stringify(payload, null, 2));
+      console.log(JSON.stringify(result.data, null, 2));
     }
 
     return result;
