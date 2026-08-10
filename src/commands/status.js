@@ -39,6 +39,9 @@ class StatusCommand extends Command {
       ? this.pluginSystem.listPlugins()
       : [];
     const cpus = os.cpus();
+    const uptimeSeconds = os.uptime();
+    const freeBytes = os.freemem();
+    const totalBytes = os.totalmem();
 
     return {
       cli: {
@@ -49,13 +52,13 @@ class StatusCommand extends Command {
       system: {
         platform: process.platform,
         arch: process.arch,
-        uptimeSeconds: os.uptime(),
-        uptime: this.formatUptime(os.uptime()),
+        uptimeSeconds,
+        uptime: this.formatUptime(uptimeSeconds),
         memory: {
-          freeBytes: os.freemem(),
-          totalBytes: os.totalmem(),
-          freeGb: Number((os.freemem() / (1024 ** 3)).toFixed(2)),
-          totalGb: Number((os.totalmem() / (1024 ** 3)).toFixed(2)),
+          freeBytes,
+          totalBytes,
+          freeGb: Number((freeBytes / (1024 ** 3)).toFixed(2)),
+          totalGb: Number((totalBytes / (1024 ** 3)).toFixed(2)),
           cliHeapUsedBytes: process.memoryUsage().heapUsed
         },
         cpu: {
