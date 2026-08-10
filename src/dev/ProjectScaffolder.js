@@ -44,7 +44,7 @@ class ProjectScaffolder {
       main: 'index.js'
     }, null, 2) + '\n');
     this.write(target, 'index.js', "module.exports = function init({ registry }) {\n  // Register plugin commands here.\n  void registry;\n};\n");
-    this.write(target, 'README.md', `# ${name}\n\nYasinCLI plugin scaffold.\n\n## Development\n\nImplement the plugin entry point in \\`index.js\\`.\n`);
+    this.write(target, 'README.md', `# ${name}\n\nYasinCLI plugin scaffold.\n\n## Development\n\nImplement the plugin entry point in index.js.\n`);
     return { type: 'plugin', name, path: target };
   }
 
