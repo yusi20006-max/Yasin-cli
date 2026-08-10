@@ -9,7 +9,12 @@ describe('Phase 4.5.1 automation contract', () => {
   });
 
   test('AutomationResult failure has stable shape', () => {
-    expect(AutomationResult.failure(ExitCodes.GENERAL_ERROR, 'failed', { value: 1 })).toEqual({ ok: false, code: ExitCodes.GENERAL_ERROR, error: { message: 'failed', data: { value: 1 } } });
+    expect(AutomationResult.failure(ExitCodes.GENERAL_ERROR, 'failed', { value: 1 })).toEqual({
+      ok: false,
+      code: ExitCodes.GENERAL_ERROR,
+      data: { value: 1 },
+      error: { type: 'GENERAL_ERROR', message: 'failed' }
+    });
   });
 
   test('commands can declare JSON support', () => {

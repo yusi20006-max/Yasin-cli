@@ -22,9 +22,14 @@ const TYPE_TO_CODE = Object.freeze({
   [ErrorTypes.RUNTIME]: ExitCodes.GENERAL_ERROR
 });
 
-const CODE_TO_TYPE = Object.freeze(
-  Object.fromEntries(Object.entries(TYPE_TO_CODE).map(([type, code]) => [code, type]))
-);
+// Prefer canonical types for shared exit codes (GENERAL over VALIDATION/ADAPTER/RUNTIME).
+const CODE_TO_TYPE = Object.freeze({
+  [ExitCodes.GENERAL_ERROR]: ErrorTypes.GENERAL,
+  [ExitCodes.INVALID_COMMAND]: ErrorTypes.INVALID_COMMAND,
+  [ExitCodes.SERVICE_UNAVAILABLE]: ErrorTypes.SERVICE_UNAVAILABLE,
+  [ExitCodes.CONFIGURATION_ERROR]: ErrorTypes.CONFIGURATION,
+  [ExitCodes.DEPENDENCY_ERROR]: ErrorTypes.DEPENDENCY
+});
 
 function classify(error, fallbackType = ErrorTypes.GENERAL) {
   if (!error) return fallbackType;

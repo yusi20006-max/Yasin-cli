@@ -23,7 +23,18 @@ class ServiceHealthOperation {
         return { service: adapter.serviceId, status: 'unsupported' };
       }
       try {
-        return { service: adapter.serviceId, status: 'ok', data: method.call(adapter, args, options) };
+        const data = method.call(adapter, args, options);
+        const explicitUnhealthy = data && (
+          data.healthy === false
+          || data.status === 'unhealthy'
+          || data.status === 'error'
+          || data.status === 'down'
+        );
+        return {
+          service: adapter.serviceId,
+          status: explicitUnhealthy ? 'error' : 'ok',
+          data
+        };
       } catch (error) {
         return { service: adapter.serviceId, status: 'error', error: { message: error.message } };
       }

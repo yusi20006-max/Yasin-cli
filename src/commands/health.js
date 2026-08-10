@@ -22,11 +22,24 @@ class HealthCommand extends Command {
     } else {
       const adapters = Array.isArray(this.adaptersOrOperation) ? this.adaptersOrOperation : [];
       const services = adapters.map((adapter) => {
+        const serviceId = adapter.serviceId || adapter.id || 'unknown';
         try {
-          const value = typeof adapter.health === 'function' ? adapter.health(args.slice(1), options) : adapter.doctor();
-          return { service: adapter.serviceId, status: 'ok', data: value };
+          const value = typeof adapter.health === 'function'
+            ? adapter.health(args.slice(1), options)
+            : (typeof adapter.doctor === 'function' ? adapter.doctor() : null);
+          const explicitUnhealthy = value && (
+            value.healthy === false
+            || value.status === 'unhealthy'
+            || value.status === 'error'
+            || value.status === 'down'
+          );
+          return {
+            service: serviceId,
+            status: explicitUnhealthy ? 'error' : 'ok',
+            data: value
+          };
         } catch (error) {
-          return { service: adapter.serviceId, status: 'error', error: { message: error.message } };
+          return { service: serviceId, status: 'error', error: { message: error.message } };
         }
       });
       const healthy = services.every((item) => item.status === 'ok');

@@ -22,9 +22,10 @@ describe('production runtime commands', () => {
     ];
     const command = new HealthCommand(adapters);
     const result = command.execute();
-    expect(result.ok).toBe(true);
+    expect(result.ok).toBe(false);
     expect(result.data.healthy).toBe(false);
     expect(result.data.services).toHaveLength(2);
+    expect(result.error.type).toBe('RUNTIME_ERROR');
   });
 
   test('logs delegates to ServiceManager', () => {
