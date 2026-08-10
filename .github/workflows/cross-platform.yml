@@ -4,7 +4,7 @@ on:
   push:
     branches: ["phase-4.5.1-reconciliation-automation"]
   pull_request:
-    branches: ["phase-4.5.1-reconciliation-automation"]
+    branches: ["initial-setup"]
   workflow_dispatch:
 
 permissions:
