@@ -21,7 +21,6 @@ class DoctorCommand extends Command {
 
   collectResults() {
     const results = [];
-
     const nodeVer = process.version;
     const major = parseInt(nodeVer.slice(1).split('.')[0], 10);
     results.push(major >= 18
@@ -44,13 +43,7 @@ class DoctorCommand extends Command {
 
     const pluginDir = path.join(configDir, 'plugins');
     if (!fs.existsSync(pluginDir)) {
-      results.push({
-        name: 'Plugin Directory',
-        status: 'fail',
-        msg: `${pluginDir} (Directory does not exist)`,
-        fixable: true,
-        fixType: 'create_plugin_dir'
-      });
+      results.push({ name: 'Plugin Directory', status: 'fail', msg: `${pluginDir} (Directory does not exist)`, fixable: true, fixType: 'create_plugin_dir' });
     } else {
       try {
         fs.accessSync(pluginDir, fs.constants.R_OK | fs.constants.W_OK);
@@ -76,24 +69,16 @@ class DoctorCommand extends Command {
     const repairActions = [];
 
     if (options.fix) {
-      if (results.some(res => res.status === 'fail' && res.fixable)) {
-        if (!options.json) console.log('\nAttempting auto-healing...');
-      }
-
       results.forEach(res => {
-        if (res.status === 'fail' && res.fixable && res.fixType === 'create_plugin_dir') {
-          const pluginDir = path.join(this.configManager.configDir, 'plugins');
-          try {
-            fs.mkdirSync(pluginDir, { recursive: true });
-            repairActions.push({ action: res.fixType, status: 'fixed', path: pluginDir });
-            if (!options.json) console.log(`[✓] Created plugin directory: ${pluginDir}`);
-          } catch (err) {
-            repairActions.push({ action: res.fixType, status: 'failed', error: err.message });
-            if (!options.json) console.error(`[✗] Failed to create plugin directory: ${err.message}`);
-          }
+        if (res.status !== 'fail' || !res.fixable || res.fixType !== 'create_plugin_dir') return;
+        const pluginDir = path.join(this.configManager.configDir, 'plugins');
+        try {
+          fs.mkdirSync(pluginDir, { recursive: true });
+          repairActions.push({ action: res.fixType, status: 'fixed', path: pluginDir });
+        } catch (err) {
+          repairActions.push({ action: res.fixType, status: 'failed', error: err.message });
         }
       });
-
       results = this.collectResults();
       issuesCount = results.filter(res => res.status === 'fail').length;
     }
@@ -105,35 +90,9 @@ class DoctorCommand extends Command {
       ...(options.fix ? { repairActions } : {})
     };
 
-    const result = issuesCount === 0
+    return issuesCount === 0
       ? AutomationResult.success(data)
       : AutomationResult.failure(ExitCodes.GENERAL_ERROR, `${issuesCount} issue(s) found`, data);
-
-    if (options.json) return result;
-
-    console.log('Running Yasin CLI Diagnostics...\n');
-    results.forEach(res => {
-      const sym = res.status === 'pass' ? '[✓]' : '[✗]';
-      console.log(`${sym} ${res.name}: ${res.msg}`);
-    });
-    console.log();
-
-    if (issuesCount === 0) {
-      if (options.fix && repairActions.length > 0) {
-        console.log('Status: All repairable issues fixed! No issues remaining.');
-      } else {
-        console.log('Status: All checks passed! No issues found.');
-      }
-    } else {
-      console.log(`Status: ${issuesCount} issue(s) found.`);
-      if (options.fix) {
-        console.log('Status: Auto-healing complete. ' + `${issuesCount} issue(s) remaining.`);
-      } else if (results.some(res => res.status === 'fail' && res.fixable)) {
-        console.log('Tip: Run "yasin doctor --fix" to automatically resolve repairable issues.');
-      }
-    }
-
-    return result;
   }
 }
 
