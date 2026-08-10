@@ -29,10 +29,12 @@ class ServiceHealthOperation {
       }
     });
 
-    const failed = results.some(item => item.status === 'error');
-    return failed
-      ? AutomationResult.failure(ExitCodes.GENERAL_ERROR, `${operation} failed for one or more services`, { operation, service, results })
-      : AutomationResult.success({ operation, service, results });
+    const healthy = results.every(item => item.status === 'ok');
+    const data = { operation, service, healthy, results };
+
+    return healthy
+      ? AutomationResult.success(data)
+      : AutomationResult.failure(ExitCodes.GENERAL_ERROR, `${operation} failed for one or more services`, data);
   }
 }
 
