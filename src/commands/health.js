@@ -33,9 +33,6 @@ class HealthCommand extends Command {
       result = AutomationResult.success({ healthy, services });
     }
 
-    if (!options.json) {
-      console.log(JSON.stringify(result.data, null, 2));
-    }
     return result;
   }
 }
