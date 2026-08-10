@@ -30,7 +30,9 @@ class HealthCommand extends Command {
         }
       });
       const healthy = services.every((item) => item.status === 'ok');
-      result = AutomationResult.success({ healthy, services });
+      result = healthy
+        ? AutomationResult.success({ healthy, services })
+        : AutomationResult.failure('RUNTIME_ERROR', 'One or more services failed health checks.', { healthy, services });
     }
 
     return result;
