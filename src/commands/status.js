@@ -80,31 +80,31 @@ class StatusCommand extends Command {
   }
 
   execute(args, options = {}) {
-    const data = this.statusOperation
-      ? this.statusOperation.execute('all', args || [], options).data
-      : this.collectStatus();
+    const data = this.collectStatus();
+    if (this.statusOperation) {
+      const canonical = this.statusOperation.execute('all', args || [], options);
+      data.services.canonical = canonical.data?.results || [];
+    }
     const result = AutomationResult.success(data);
 
     if (options.json) return result;
 
     console.log('=== Yasin CLI Status ===\n');
-    console.log(`CLI Version:       v${data.cli?.version || this.getVersion()}`);
-    if (data.cli?.configDirectory) console.log(`Config Directory:  ${data.cli.configDirectory}`);
-    if (data.cli?.configFile) console.log(`Config File:       ${data.cli.configFile}`);
+    console.log(`CLI Version:       v${data.cli.version}`);
+    console.log(`Config Directory:  ${data.cli.configDirectory}`);
+    console.log(`Config File:       ${data.cli.configFile}`);
     console.log();
 
-    if (data.system) {
-      console.log('--- System Resources ---');
-      console.log(`OS Uptime:         ${data.system.uptime}`);
-      console.log(`System Memory:     ${data.system.memory.freeGb.toFixed(2)} GB free / ${data.system.memory.totalGb.toFixed(2)} GB total`);
-      console.log(`CLI Process Memory:${(data.system.memory.cliHeapUsedBytes / (1024 ** 2)).toFixed(2)} MB heap used`);
-      console.log(`CPU Cores:         ${data.system.cpu.cores}x ${data.system.cpu.model}`);
-      if (data.system.loadAverage) console.log(`System Load (Avg): ${data.system.loadAverage.map(v => v.toFixed(2)).join(', ')}`);
-      console.log();
-    }
+    console.log('--- System Resources ---');
+    console.log(`OS Uptime:         ${data.system.uptime}`);
+    console.log(`System Memory:     ${data.system.memory.freeGb.toFixed(2)} GB free / ${data.system.memory.totalGb.toFixed(2)} GB total`);
+    console.log(`CLI Process Memory:${(data.system.memory.cliHeapUsedBytes / (1024 ** 2)).toFixed(2)} MB heap used`);
+    console.log(`CPU Cores:         ${data.system.cpu.cores}x ${data.system.cpu.model}`);
+    if (data.system.loadAverage) console.log(`System Load (Avg): ${data.system.loadAverage.map(v => v.toFixed(2)).join(', ')}`);
+    console.log();
 
     console.log('--- Managed Services ---');
-    if (!data.services?.initialized) {
+    if (!data.services.initialized) {
       console.log('Service Manager not initialized.');
     } else if (data.services.total === 0) {
       console.log('No services registered.');
@@ -116,7 +116,7 @@ class StatusCommand extends Command {
     console.log();
 
     console.log('--- Active Plugins ---');
-    if (!data.plugins?.initialized) {
+    if (!data.plugins.initialized) {
       console.log('Plugin System not initialized.');
     } else if (data.plugins.total === 0) {
       console.log('No plugins installed.');
