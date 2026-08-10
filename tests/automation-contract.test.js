@@ -20,12 +20,14 @@ describe('Phase 4.5.1 automation contract', () => {
   test('registry rejects JSON mode for unsupported commands', () => {
     const registry = new CommandRegistry();
     registry.register(new Command({ name: 'example' }));
-    const exitMock = jest.spyOn(process, 'exit').mockImplementation(() => {});
+    const logMock = jest.spyOn(console, 'log').mockImplementation(() => {});
     const errorMock = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const exitMock = jest.spyOn(process, 'exit').mockImplementation(() => {});
     registry.dispatch(['example', '--json']);
-    expect(errorMock).toHaveBeenCalledWith(expect.stringContaining('does not support --json'));
+    expect(logMock).toHaveBeenCalledWith(expect.stringContaining('does not support --json'));
     expect(exitMock).toHaveBeenCalledWith(ExitCodes.INVALID_COMMAND);
     exitMock.mockRestore();
     errorMock.mockRestore();
+    logMock.mockRestore();
   });
 });
