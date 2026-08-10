@@ -1,5 +1,7 @@
 const path = require('path');
 const fs = require('fs');
+const OutputFormatter = require('../output/OutputFormatter');
+const ExitCodes = require('../output/ExitCodes');
 
 class CommandRegistry {
   constructor() {
@@ -22,11 +24,9 @@ class CommandRegistry {
   }
 
   dispatch(rawArgs) {
-    // 1. Extract global flags first if any
     const hasHelp = rawArgs.includes('--help') || rawArgs.includes('-h');
     const hasVersion = rawArgs.includes('--version') || rawArgs.includes('-v');
 
-    // Find the command name: first argument that doesn't start with '-'
     let cmdName = null;
     let cmdIndex = -1;
     for (let i = 0; i < rawArgs.length; i++) {
@@ -37,46 +37,45 @@ class CommandRegistry {
       }
     }
 
-    // 2. Handle --version / -v globally
     if (hasVersion && !cmdName) {
       this.printVersion();
-      process.exit(0);
+      process.exit(ExitCodes.SUCCESS);
       return;
     }
 
-    // 3. Handle --help / -h or no command globally
     if (!cmdName) {
       this.printGlobalHelp();
-      process.exit(0);
+      process.exit(ExitCodes.SUCCESS);
       return;
     }
 
-    // 4. Retrieve registered command
     const command = this.commands.get(cmdName);
     if (!command) {
-      console.error(`Error: Unknown command "${cmdName}".\n`);
+      console.error(`Error: Unknown command \"${cmdName}\".\n`);
       this.printGlobalHelp();
-      process.exit(1);
+      process.exit(ExitCodes.INVALID_COMMAND);
       return;
     }
 
-    // Slice arguments for the command
     const commandRawArgs = [
       ...rawArgs.slice(0, cmdIndex),
       ...rawArgs.slice(cmdIndex + 1)
     ];
 
-    // 5. Parse command-specific arguments and options
     const parsed = command.parse(commandRawArgs);
 
-    // 6. Handle command-specific help
-    if (parsed.options.help || parsed.options.h) {
-      this.printCommandHelp(command);
-      process.exit(0);
+    if (parsed.options.json && !command.supportsJson) {
+      console.error(`Error: Command \"${cmdName}\" does not support --json yet.`);
+      process.exit(ExitCodes.INVALID_COMMAND);
       return;
     }
 
-    // 7. Validate required arguments
+    if (parsed.options.help || parsed.options.h) {
+      this.printCommandHelp(command);
+      process.exit(ExitCodes.SUCCESS);
+      return;
+    }
+
     const commandArgsDef = command.args || [];
     const givenArgs = parsed.args;
 
@@ -85,26 +84,52 @@ class CommandRegistry {
       if (argDef.required && (givenArgs[i] === undefined || givenArgs[i] === '')) {
         console.error(`Error: Missing required argument <${argDef.name}>.\n`);
         this.printCommandHelp(command);
-        process.exit(1);
+        process.exit(ExitCodes.INVALID_COMMAND);
         return;
       }
     }
 
-    // 8. Execute the command (supporting sync/async and handling errors)
     try {
       const result = command.execute(givenArgs, parsed.options);
       if (result && typeof result.then === 'function') {
-        return result.catch(err => {
-          console.error(`Error executing command "${cmdName}":`, err.message);
-          process.exit(1);
+        return result.then(res => this.handleResult(res, parsed.options)).catch(err => {
+          this.handleError(cmdName, err, parsed.options);
         });
       }
-      return result;
+      return this.handleResult(result, parsed.options);
     } catch (err) {
-      console.error(`Error executing command "${cmdName}":`, err.message);
-      process.exit(1);
+      this.handleError(cmdName, err, parsed.options);
       return;
     }
+  }
+
+  handleResult(result, options = {}) {
+    if (!options.json) return result;
+
+    const payload = result === undefined
+      ? { ok: true, code: ExitCodes.SUCCESS, data: null }
+      : result;
+
+    console.log(OutputFormatter.json(payload));
+
+    if (payload && Number.isInteger(payload.code) && payload.code !== ExitCodes.SUCCESS) {
+      process.exit(payload.code);
+    }
+
+    return result;
+  }
+
+  handleError(cmdName, err, options = {}) {
+    if (options.json) {
+      console.log(OutputFormatter.json({
+        ok: false,
+        code: ExitCodes.GENERAL_ERROR,
+        error: { message: err.message }
+      }));
+    } else {
+      console.error(`Error executing command \"${cmdName}\":`, err.message);
+    }
+    process.exit(ExitCodes.GENERAL_ERROR);
   }
 
   printVersion() {
@@ -138,7 +163,6 @@ class CommandRegistry {
     console.log(`Usage: yasin <command> [arguments] [options]\n`);
     console.log(`Commands:`);
 
-    // Find length of longest command for pretty alignment
     let maxLen = 0;
     this.commands.forEach((_, name) => {
       if (name.length > maxLen) maxLen = name.length;
@@ -152,6 +176,7 @@ class CommandRegistry {
     console.log(`\nGlobal Options:`);
     console.log(`  -h, --help     Show help information`);
     console.log(`  -v, --version  Show version information`);
+    console.log(`      --json     Emit machine-readable JSON (supported commands only)`);
   }
 
   printCommandHelp(command) {
@@ -194,6 +219,10 @@ class CommandRegistry {
         console.log(`  ${paddedName}${opt.description || ''} ${defStr}`);
       });
       console.log();
+    }
+
+    if (command.supportsJson) {
+      console.log('  --json         Emit machine-readable JSON');
     }
   }
 }
