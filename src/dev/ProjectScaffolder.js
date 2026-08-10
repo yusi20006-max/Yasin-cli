@@ -59,7 +59,7 @@ class ProjectScaffolder {
   createAdapter(name) {
     const target = this.resolveTarget(name);
     this.ensureEmpty(target);
-    const className = `${name.replace(/(^|[-_])([a-z])/g, (_, p, c) => c.toUpperCase())}Adapter`;
+    const className = `${name.split(/[-_]+/).filter(Boolean).map(part => part.charAt(0).toUpperCase() + part.slice(1)).join('')}Adapter`;
     this.write(target, `${className}.js`, `const BaseEcosystemAdapter = require('yasin-cli/src/adapters/BaseEcosystemAdapter');\n\nclass ${className} extends BaseEcosystemAdapter {\n  constructor(configManager, serviceManager) {\n    super(configManager, serviceManager, {\n      serviceId: '${name}',\n      configKey: '${name}',\n      envPrefix: '${name.toUpperCase().replace(/[^A-Z0-9]/g, '_')}',\n      serviceName: '${name}',\n      mode: 'daemon'\n    });\n  }\n}\n\nmodule.exports = ${className};\n`);
     this.write(target, 'README.md', `# ${className}\n\nYasinCLI adapter scaffold.\n`);
     return { type: 'adapter', name, path: target, className };
