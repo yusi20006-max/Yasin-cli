@@ -4,11 +4,11 @@
   "description": "Yasin CLI is a modular, extensible command line interface tool.",
   "main": "src/index.js",
   "bin": {
-    "yasin": "./yasin.sh"
+    "yasin": "./bin/yasin.js"
   },
   "scripts": {
     "test": "jest",
-    "lint": "eslint src tests",
+    "lint": "eslint src tests bin",
     "smoke": "node tests/smoke.js"
   },
   "repository": {
