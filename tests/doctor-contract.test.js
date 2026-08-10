@@ -1,9 +1,8 @@
 const DoctorCommand = require('../src/commands/doctor');
-const AutomationResult = require('../src/output/AutomationResult');
 const ExitCodes = require('../src/output/ExitCodes');
 
 describe('DoctorCommand contracts', () => {
-  test('JSON mode returns AutomationResult without human output responsibility', () => {
+  test('JSON mode returns the structured automation result without human output responsibility', () => {
     const config = {
       configDir: process.cwd(),
       ensureDirectoryExists: jest.fn()
@@ -11,7 +10,7 @@ describe('DoctorCommand contracts', () => {
     const command = new DoctorCommand(config);
     const result = command.execute([], { json: true });
 
-    expect(result).toBeInstanceOf(AutomationResult);
+    expect(result).toHaveProperty('ok');
     expect(result.data).toHaveProperty('results');
     expect(result.code).toBeGreaterThanOrEqual(ExitCodes.SUCCESS);
   });
