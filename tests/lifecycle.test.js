@@ -20,8 +20,10 @@ describe('ecosystem lifecycle command', () => {
     const result = command.execute(['all']);
 
     expect(calls).toEqual(['relay']);
-    expect(result.services[0].status).toBe('skipped');
-    expect(result.services[1].status).toBe('ok');
+    expect(result.ok).toBe(true);
+    expect(result.data.services[0].status).toBe('skipped');
+    expect(result.data.services[1].status).toBe('ok');
+    expect(result.data.services[1].pid).toBe(123);
   });
 
   test('rejects unknown service', () => {

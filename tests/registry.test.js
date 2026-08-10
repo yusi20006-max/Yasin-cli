@@ -89,10 +89,10 @@ describe('CommandRegistry', () => {
     expect(exitMock).toHaveBeenCalledWith(0);
   });
 
-  it('should fail on unknown command', () => {
+  it('should fail on unknown command with the stable invalid-command exit code', () => {
     registry.dispatch(['unknown-cmd']);
     expect(errorMock).toHaveBeenCalledWith(expect.stringContaining('Unknown command "unknown-cmd"'));
-    expect(exitMock).toHaveBeenCalledWith(1);
+    expect(exitMock).toHaveBeenCalledWith(2);
   });
 
   it('should dispatch to registered command and execute successfully', () => {
@@ -105,12 +105,15 @@ describe('CommandRegistry', () => {
     });
   });
 
-  it('should fail dispatch if required argument is missing', () => {
+  it('should fail dispatch if required argument is missing with the stable invalid-command exit code', () => {
     const cmd = new TestCommand();
     registry.register(cmd);
     registry.dispatch(['test-cmd']);
-    expect(errorMock).toHaveBeenCalledWith(expect.stringContaining('Missing required argument <reqArg>'));
-    expect(exitMock).toHaveBeenCalledWith(1);
+    expect(errorMock).toHaveBeenCalledWith(
+      'Error executing command "test-cmd":',
+      expect.stringContaining('Missing required argument <reqArg>')
+    );
+    expect(exitMock).toHaveBeenCalledWith(2);
   });
 
   it('should display command-specific help on command --help / -h', () => {

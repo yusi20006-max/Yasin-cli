@@ -3,12 +3,15 @@ const child_process = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const AutomationResult = require('../output/AutomationResult');
+const ExitCodes = require('../output/ExitCodes');
 
 class DoctorCommand extends Command {
   constructor(configManager) {
     super({
       name: 'doctor',
       description: 'Run diagnostic health checks on the environment',
+      supportsJson: true,
       options: [
         { name: '--fix', alias: '-f', type: 'boolean', description: 'Automatically fix repairable issues' }
       ]
@@ -16,124 +19,109 @@ class DoctorCommand extends Command {
     this.configManager = configManager;
   }
 
-  execute(args, options) {
-    console.log('Running Yasin CLI Diagnostics...\n');
-
+  collectResults() {
     const results = [];
-    let issuesCount = 0;
-
-    // Check 1: Node.js version compatibility
     const nodeVer = process.version;
     const major = parseInt(nodeVer.slice(1).split('.')[0], 10);
-    const nodeCompatible = major >= 18;
-    if (nodeCompatible) {
-      results.push({ name: 'Node.js Version', status: 'pass', msg: `${nodeVer} (Compatible)` });
-    } else {
-      results.push({ name: 'Node.js Version', status: 'fail', msg: `${nodeVer} (Legacy, recommended >= v18.x)` });
-      issuesCount++;
-    }
+    results.push(major >= 18
+      ? { name: 'Node.js Version', status: 'pass', msg: `${nodeVer} (Compatible)` }
+      : { name: 'Node.js Version', status: 'fail', msg: `${nodeVer} (Legacy, recommended >= v18.x)` });
 
-    // Check 2: OS compatibility
     const platform = process.platform;
-    let osName = platform;
     const isTermux = process.env.PREFIX && process.env.PREFIX.includes('com.termux');
-    if (isTermux) {
-      osName = 'termux';
-    }
+    const osName = isTermux ? 'termux' : platform;
     results.push({ name: 'OS Platform', status: 'pass', msg: `${osName} (${os.release()} ${os.arch()})` });
 
-    // Check 3: Config Directory permission
     const configDir = this.configManager.configDir;
-    let configStatus = 'pass';
-    let configMsg = `${configDir} (Writable)`;
     try {
       this.configManager.ensureDirectoryExists();
       fs.accessSync(configDir, fs.constants.R_OK | fs.constants.W_OK);
+      results.push({ name: 'Config Directory', status: 'pass', msg: `${configDir} (Writable)` });
     } catch (e) {
-      configStatus = 'fail';
-      configMsg = `${configDir} (Read/Write access denied)`;
-      issuesCount++;
+      results.push({ name: 'Config Directory', status: 'fail', msg: `${configDir} (Read/Write access denied)` });
     }
-    results.push({ name: 'Config Directory', status: configStatus, msg: configMsg });
 
-    // Check 4: Plugin Directory permission
-    const pluginDir = path.join(this.configManager.configDir, 'plugins');
-    let pluginStatus = 'pass';
-    let pluginMsg = `${pluginDir} (Writable)`;
-    let pluginFixable = false;
-
+    const pluginDir = path.join(configDir, 'plugins');
     if (!fs.existsSync(pluginDir)) {
-      pluginStatus = 'fail';
-      pluginMsg = `${pluginDir} (Directory does not exist)`;
-      pluginFixable = true;
-      issuesCount++;
+      results.push({ name: 'Plugin Directory', status: 'fail', msg: `${pluginDir} (Directory does not exist)`, fixable: true, fixType: 'create_plugin_dir' });
     } else {
       try {
         fs.accessSync(pluginDir, fs.constants.R_OK | fs.constants.W_OK);
+        results.push({ name: 'Plugin Directory', status: 'pass', msg: `${pluginDir} (Writable)` });
       } catch (e) {
-        pluginStatus = 'fail';
-        pluginMsg = `${pluginDir} (Read/Write access denied)`;
-        issuesCount++;
+        results.push({ name: 'Plugin Directory', status: 'fail', msg: `${pluginDir} (Read/Write access denied)` });
       }
     }
-    results.push({ name: 'Plugin Directory', status: pluginStatus, msg: pluginMsg, fixable: pluginFixable, fixType: 'create_plugin_dir' });
 
-    // Check 5: Git dependency
-    let gitVer = '';
-    let gitStatus = 'pass';
     try {
-      gitVer = child_process.execSync('git --version', { stdio: 'pipe' }).toString().trim();
-      gitStatus = 'pass';
+      const gitVer = child_process.execSync('git --version', { stdio: 'pipe' }).toString().trim();
+      results.push({ name: 'Git Dependency', status: 'pass', msg: gitVer });
     } catch (e) {
-      gitStatus = 'fail';
-      gitVer = 'git is not installed or not in PATH';
-      issuesCount++;
+      results.push({ name: 'Git Dependency', status: 'fail', msg: 'git is not installed or not in PATH' });
     }
-    results.push({ name: 'Git Dependency', status: gitStatus, msg: gitVer });
 
-    // Print results
-    results.forEach(res => {
-      const sym = res.status === 'pass' ? '[✓]' : '[✗]';
-      console.log(`${sym} ${res.name}: ${res.msg}`);
+    return results;
+  }
+
+  renderHuman(result, options = {}) {
+    if (options.json) return;
+    const data = result.data || {};
+    console.log('Running Yasin CLI Diagnostics...');
+    (data.results || []).forEach(item => {
+      console.log(`${item.name}: ${item.msg}`);
     });
-
-    console.log();
-
-    if (issuesCount === 0) {
-      console.log('Status: All checks passed! No issues found.');
-      return;
-    }
-
-    console.log(`Status: ${issuesCount} issue(s) found.`);
-
-    // Auto-Healing
-    if (options.fix) {
-      console.log('\nAttempting auto-healing...');
-      results.forEach(res => {
-        if (res.status === 'fail' && res.fixable) {
-          if (res.fixType === 'create_plugin_dir') {
-            try {
-              fs.mkdirSync(pluginDir, { recursive: true });
-              console.log(`[✓] Created plugin directory: ${pluginDir}`);
-              issuesCount--;
-            } catch (err) {
-              console.error(`[✗] Failed to create plugin directory: ${err.message}`);
-            }
-          }
+    if (Array.isArray(data.repairActions) && data.repairActions.length > 0) {
+      console.log('Attempting auto-healing...');
+      data.repairActions.forEach(action => {
+        if (action.status === 'fixed' && action.action === 'create_plugin_dir') {
+          console.log(`Created plugin directory: ${action.path}`);
         }
       });
-      console.log();
-      if (issuesCount === 0) {
-        console.log('Status: All repairable issues fixed! No issues remaining.');
+    }
+    if (result.ok) {
+      if (Array.isArray(data.repairActions) && data.repairActions.length > 0) {
+        console.log('Status: All repairable issues fixed!');
       } else {
-        console.log(`Status: Auto-healing complete. ${issuesCount} issue(s) remaining.`);
+        console.log('Status: All checks passed.');
       }
     } else {
-      const fixableResults = results.filter(res => res.status === 'fail' && res.fixable);
-      if (fixableResults.length > 0) {
-        console.log('Tip: Run "yasin doctor --fix" to automatically resolve repairable issues.');
-      }
+      console.log(`Status: ${data.issues || 0} issue(s) found.`);
     }
+  }
+
+  execute(args, options = {}) {
+    let results = this.collectResults();
+    let issuesCount = results.filter(res => res.status === 'fail').length;
+    const repairActions = [];
+
+    if (options.fix) {
+      results.forEach(res => {
+        if (res.status !== 'fail' || !res.fixable || res.fixType !== 'create_plugin_dir') return;
+        const pluginDir = path.join(this.configManager.configDir, 'plugins');
+        try {
+          fs.mkdirSync(pluginDir, { recursive: true });
+          repairActions.push({ action: res.fixType, status: 'fixed', path: pluginDir });
+        } catch (err) {
+          repairActions.push({ action: res.fixType, status: 'failed', error: err.message });
+        }
+      });
+      results = this.collectResults();
+      issuesCount = results.filter(res => res.status === 'fail').length;
+    }
+
+    const data = {
+      healthy: issuesCount === 0,
+      issues: issuesCount,
+      results,
+      ...(options.fix ? { repairActions } : {})
+    };
+
+    const result = issuesCount === 0
+      ? AutomationResult.success(data)
+      : AutomationResult.failure(ExitCodes.GENERAL_ERROR, `${issuesCount} issue(s) found`, data);
+
+    this.renderHuman(result, options);
+    return result;
   }
 }
 

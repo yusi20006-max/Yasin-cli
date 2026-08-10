@@ -70,6 +70,7 @@ class BaseEcosystemAdapter {
       version: true,
       status: this.mode === 'daemon',
       doctor: true,
+      health: true,
       config: true
     };
   }
@@ -131,6 +132,18 @@ class BaseEcosystemAdapter {
     const failed = checks.some(check => check.status === 'FAIL');
     const warned = checks.some(check => check.status === 'WARN');
     return { status: failed ? 'unhealthy' : warned ? 'degraded' : 'healthy', checks, detection, version, capabilities: this.capabilities() };
+  }
+
+  health() {
+    const diagnosis = this.doctor();
+    return {
+      status: diagnosis.status === 'healthy' ? 'healthy' : diagnosis.status === 'degraded' ? 'degraded' : 'unhealthy',
+      service: this.serviceId,
+      checks: diagnosis.checks,
+      detection: diagnosis.detection,
+      version: diagnosis.version,
+      capabilities: diagnosis.capabilities
+    };
   }
 
   start() {

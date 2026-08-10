@@ -1,0 +1,50 @@
+name: Release Readiness
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["phase-4.5.1-reconciliation-automation"]
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Release gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Require clean lockfile state
+        run: git diff --exit-code -- package.json package-lock.json
+
+      - name: Install from lockfile
+        run: npm ci --ignore-scripts
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test -- --runInBand
+
+      - name: Smoke test
+        run: npm run smoke
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Verify launcher exists and is executable on POSIX
+        run: test -f bin/yasin.js && test -x bin/yasin.js
+
+      - name: Verify release documentation
+        run: test -f docs/release-readiness.md
