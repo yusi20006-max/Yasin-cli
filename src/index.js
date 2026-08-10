@@ -47,7 +47,7 @@ function bootstrap() {
 
     registry.register(new ConfigCommand(configManager));
     registry.register(new DoctorCommand(configManager));
-    registry.register(new StatusCommand(configManager, serviceManager, pluginSystem));
+    registry.register(new StatusCommand(configManager, serviceManager, pluginSystem, serviceStatusOperation));
     registry.register(new ServiceCommand(serviceManager));
     registry.register(new PluginCommand(pluginSystem));
     registry.register(new DiscoverCommand(adapters));
