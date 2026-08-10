@@ -10,8 +10,9 @@ describe('production runtime commands', () => {
     ];
     const command = new DiscoverCommand(adapters);
     const result = command.execute();
-    expect(result.services).toHaveLength(2);
-    expect(result.services[0].id).toBe('core');
+    expect(result.ok).toBe(true);
+    expect(result.data.services).toHaveLength(2);
+    expect(result.data.services[0].id).toBe('core');
   });
 
   test('health reports unhealthy when an adapter is unhealthy', () => {
@@ -21,8 +22,9 @@ describe('production runtime commands', () => {
     ];
     const command = new HealthCommand(adapters);
     const result = command.execute();
-    expect(result.healthy).toBe(false);
-    expect(result.services).toHaveLength(2);
+    expect(result.ok).toBe(true);
+    expect(result.data.healthy).toBe(false);
+    expect(result.data.services).toHaveLength(2);
   });
 
   test('logs delegates to ServiceManager', () => {
