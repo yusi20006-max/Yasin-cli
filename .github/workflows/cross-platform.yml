@@ -7,6 +7,9 @@ on:
     branches: ["phase-4.5.1-reconciliation-automation"]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     name: ${{ matrix.os }} / Node ${{ matrix.node }}
@@ -27,14 +30,20 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install dependencies from lockfile
+        run: npm ci --ignore-scripts
+
+      - name: Verify lockfile contract
+        run: npm test -- --runInBand tests/lockfile-contract.test.js
 
       - name: Lint
         run: npm run lint
 
       - name: Test
-        run: npm test
+        run: npm test -- --runInBand
 
       - name: Smoke test
         run: npm run smoke
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
