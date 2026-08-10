@@ -30,7 +30,7 @@ jobs:
           cache: npm
 
       - name: Regenerate lockfile from package manifest
-        run: npm install --package-lock-only --ignore-scripts
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
 
       - name: Commit reconciled lockfile
         run: |
@@ -46,13 +46,16 @@ jobs:
           git push origin HEAD:phase-4.5.1-reconciliation-automation
 
       - name: Validate clean install
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Lint
         run: npm run lint
 
       - name: Test
-        run: npm test
+        run: npm test -- --runInBand
 
       - name: Smoke test
         run: npm run smoke
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
