@@ -1,0 +1,42 @@
+name: Phase 4.5.1 CI
+
+on:
+  pull_request:
+    branches: ["initial-setup"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase-4-5-1-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contract:
+    name: Ubuntu / Node 22 / Phase 4.5.1
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install from lockfile
+        run: npm ci --ignore-scripts
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test suite
+        run: npm test -- --runInBand
+
+      - name: Smoke test
+        run: npm run smoke
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
