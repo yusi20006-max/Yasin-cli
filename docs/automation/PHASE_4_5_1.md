@@ -2,21 +2,26 @@
 
 ## Goal
 
-Synchronize the existing Phase 4.5 machine-interface design with the actual command runtime without breaking the human CLI.
+Synchronize the Phase 4.5 machine-interface design with the actual command runtime without breaking the human CLI.
 
 ## Implemented
 
-- Added stable exit-code constants in `src/output/ExitCodes.js`.
-- Added a structured automation result contract in `src/output/AutomationResult.js`.
-- Added command-level `supportsJson` capability metadata.
-- Added registry-level `--json` handling for commands that explicitly support machine output.
-- Normalized `status`, `doctor`, `discover`, and `health` around structured results.
-- Prevented unsupported commands from silently pretending to provide a JSON contract.
-- Preserved human-readable output when `--json` is not supplied.
+- Stable exit-code constants in `src/output/ExitCodes.js`.
+- Structured automation results in `src/output/AutomationResult.js`.
+- Command-level `supportsJson` capability metadata.
+- Registry-level `--json` handling with explicit rejection for unsupported commands.
+- Centralized JSON formatting and exit-code handling at the registry boundary.
+- Normalized `status`, `doctor`, `discover`, `health`, `config`, `lifecycle`, `logs`, `core`, `agent`, `hub`, and `relay` around structured results where JSON support is advertised.
+- Canonical `ServiceResolver` / operation boundary for ecosystem lifecycle, status, and health operations.
+- Adapter error taxonomy mapped to stable exit codes.
+- Subprocess, lifecycle, health, output-boundary, lockfile, launcher, and production-audit tests.
+- Cross-platform validation workflow for Linux, Windows, and macOS with Node.js 18, 20, and 22.
+- Lockfile reconciliation and release-readiness workflows.
+- Canonical cross-platform Node launcher at `bin/yasin.js` while retaining `yasin.sh` as a Unix compatibility wrapper.
 
 ## Machine Contract
 
-Supported commands currently emit:
+Successful automation commands emit:
 
 ```json
 {
@@ -26,16 +31,16 @@ Supported commands currently emit:
 }
 ```
 
-Failures use:
+Failures emit a stable error envelope:
 
 ```json
 {
   "ok": false,
-  "code": 1,
+  "code": 2,
   "error": {
+    "type": "INVALID_COMMAND",
     "message": "..."
-  },
-  "data": {}
+  }
 }
 ```
 
@@ -48,23 +53,30 @@ Failures use:
 - `4` — configuration error
 - `5` — dependency error
 
-## Current JSON-capable commands
+## JSON-capable commands
+
+The following commands currently advertise `supportsJson` and return structured automation results:
 
 - `yasin status --json`
 - `yasin doctor --json`
 - `yasin discover --json`
 - `yasin health --json`
+- `yasin config --json`
+- `yasin start --json`
+- `yasin stop --json`
+- `yasin restart --json`
+- `yasin logs --json`
+- `yasin core --json`
+- `yasin agent --json`
+- `yasin hub --json`
+- `yasin relay --json`
 
-Other commands remain human-output-only until their return values and failure semantics are migrated to this contract.
+Commands that do not advertise JSON support are rejected deterministically with `INVALID_COMMAND` rather than producing an ambiguous machine interface.
 
 ## Design Boundary
 
 The automation layer does not introduce direct dependencies on Yasin-Core, Yasin-Agent, YasinHub, or YasinRelay internals. Ecosystem communication remains adapter-owned.
 
-## Remaining Work
+## Verification State
 
-1. Migrate lifecycle and logs to the same result contract.
-2. Add JSON-capable domain command groups (`core`, `agent`, `hub`, `relay`).
-3. Normalize adapter error classes and map them to stable exit codes.
-4. Add integration tests for subprocess behavior and exit codes.
-5. Verify the contract on Termux/Linux/Windows/macOS.
+Implementation and contract tests are present. Runtime release validation remains dependent on GitHub Actions execution of `npm ci`, lint, tests, smoke validation, dependency audit, and the full 9-way cross-platform matrix.
