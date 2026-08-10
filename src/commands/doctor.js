@@ -63,6 +63,32 @@ class DoctorCommand extends Command {
     return results;
   }
 
+  renderHuman(result, options = {}) {
+    if (options.json) return;
+    const data = result.data || {};
+    console.log('Running Yasin CLI Diagnostics...');
+    (data.results || []).forEach(item => {
+      console.log(`${item.name}: ${item.msg}`);
+    });
+    if (Array.isArray(data.repairActions) && data.repairActions.length > 0) {
+      console.log('Attempting auto-healing...');
+      data.repairActions.forEach(action => {
+        if (action.status === 'fixed' && action.action === 'create_plugin_dir') {
+          console.log(`Created plugin directory: ${action.path}`);
+        }
+      });
+    }
+    if (result.ok) {
+      if (Array.isArray(data.repairActions) && data.repairActions.length > 0) {
+        console.log('Status: All repairable issues fixed!');
+      } else {
+        console.log('Status: All checks passed.');
+      }
+    } else {
+      console.log(`Status: ${data.issues || 0} issue(s) found.`);
+    }
+  }
+
   execute(args, options = {}) {
     let results = this.collectResults();
     let issuesCount = results.filter(res => res.status === 'fail').length;
@@ -90,9 +116,12 @@ class DoctorCommand extends Command {
       ...(options.fix ? { repairActions } : {})
     };
 
-    return issuesCount === 0
+    const result = issuesCount === 0
       ? AutomationResult.success(data)
       : AutomationResult.failure(ExitCodes.GENERAL_ERROR, `${issuesCount} issue(s) found`, data);
+
+    this.renderHuman(result, options);
+    return result;
   }
 }
 
