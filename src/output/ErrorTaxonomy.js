@@ -22,13 +22,18 @@ const TYPE_TO_CODE = Object.freeze({
   [ErrorTypes.RUNTIME]: ExitCodes.GENERAL_ERROR
 });
 
+const CODE_TO_TYPE = Object.freeze(
+  Object.fromEntries(Object.entries(TYPE_TO_CODE).map(([type, code]) => [code, type]))
+);
+
 function classify(error, fallbackType = ErrorTypes.GENERAL) {
   if (!error) return fallbackType;
   if (error.type && Object.values(ErrorTypes).includes(error.type)) return error.type;
 
-  const codeToType = Object.entries(TYPE_TO_CODE).find(([, code]) => code === error.code);
-  if (codeToType) return codeToType[0];
+  if (typeof error.code === 'string' && Object.values(ErrorTypes).includes(error.code)) return error.code;
+  if (Object.prototype.hasOwnProperty.call(CODE_TO_TYPE, error.code)) return CODE_TO_TYPE[error.code];
 
+  if (error.code === 'CONFIGURATION_ERROR') return ErrorTypes.CONFIGURATION;
   if (error.code === 'ENOENT' || error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
     return ErrorTypes.SERVICE_UNAVAILABLE;
   }
