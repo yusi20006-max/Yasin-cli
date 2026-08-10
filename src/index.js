@@ -50,7 +50,7 @@ function bootstrap() {
     registry.register(new ServiceCommand(serviceManager));
     registry.register(new PluginCommand(pluginSystem));
     registry.register(new DiscoverCommand(adapters));
-    registry.register(new HealthCommand(adapters));
+    registry.register(new HealthCommand(serviceHealthOperation));
     registry.register(new LogsCommand(serviceManager));
     registry.register(new LifecycleCommand('start', serviceOperation));
     registry.register(new LifecycleCommand('stop', serviceOperation));
@@ -63,8 +63,6 @@ function bootstrap() {
     registry.register(new HubCommand(hubAdapter));
     registry.register(new RelayCommand(relayAdapter));
 
-    // Keep the canonical operations available to future command adapters without
-    // changing the existing system/status/diagnostics command semantics.
     registry.serviceOperations = {
       status: serviceStatusOperation,
       health: serviceHealthOperation,
