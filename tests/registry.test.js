@@ -109,7 +109,10 @@ describe('CommandRegistry', () => {
     const cmd = new TestCommand();
     registry.register(cmd);
     registry.dispatch(['test-cmd']);
-    expect(errorMock).toHaveBeenCalledWith(expect.stringContaining('Missing required argument <reqArg>'));
+    expect(errorMock).toHaveBeenCalledWith(
+      'Error executing command "test-cmd":',
+      expect.stringContaining('Missing required argument <reqArg>')
+    );
     expect(exitMock).toHaveBeenCalledWith(2);
   });
 
