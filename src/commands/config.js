@@ -1,10 +1,13 @@
 const Command = require('../core/Command');
+const AutomationResult = require('../output/AutomationResult');
+const ExitCodes = require('../output/ExitCodes');
 
 class ConfigCommand extends Command {
   constructor(configManager) {
     super({
       name: 'config',
       description: 'Manage CLI configuration settings',
+      supportsJson: true,
       args: [
         { name: 'action', required: true, description: 'Action to perform: get, set, list, or delete' },
         { name: 'key', required: false, description: 'Configuration key (e.g., general.theme)' },
@@ -14,54 +17,79 @@ class ConfigCommand extends Command {
     this.configManager = configManager;
   }
 
-  execute(args, options) {
+  renderHuman(result, options = {}) {
+    if (options.json) return;
+    if (!result.ok) {
+      console.error(result.error.message);
+      return;
+    }
+    const data = result.data || {};
+    if (data.action === 'list') {
+      console.log(JSON.stringify(data.value, null, 2));
+    } else if (data.action === 'get') {
+      console.log(data.value === undefined ? 'undefined' : String(data.value));
+    } else if (data.action === 'set') {
+      console.log(`Successfully set "${data.key}" to: ${JSON.stringify(data.value)}`);
+    } else if (data.action === 'delete') {
+      console.log(`Successfully deleted "${data.key}"`);
+    }
+  }
+
+  execute(args, options = {}) {
     const action = args[0];
     const key = args[1];
     const value = args[2];
+    let result;
+
+    if (!['get', 'set', 'delete', 'list'].includes(action)) {
+      result = AutomationResult.failure(
+        ExitCodes.INVALID_COMMAND,
+        `Unknown action "${action}". Supported actions: get, set, delete, list`
+      );
+      this.renderHuman(result, options);
+      return result;
+    }
+
+    if ((action === 'get' || action === 'delete') && !key) {
+      result = AutomationResult.failure(ExitCodes.INVALID_COMMAND, `Key is required for "${action}" action.`);
+      this.renderHuman(result, options);
+      return result;
+    }
+
+    if (action === 'set' && (!key || value === undefined)) {
+      result = AutomationResult.failure(ExitCodes.INVALID_COMMAND, 'Both key and value are required for "set" action.');
+      this.renderHuman(result, options);
+      return result;
+    }
 
     if (action === 'get') {
-      if (!key) {
-        console.error('Error: Key is required for "get" action.');
-        process.exit(1);
-      }
       const val = this.configManager.get(key);
-      if (val === undefined) {
-        console.log('undefined');
-      } else if (typeof val === 'object') {
-        console.log(JSON.stringify(val, null, 2));
-      } else {
-        console.log(val);
-      }
-    } else if (action === 'set') {
-      if (!key || value === undefined) {
-        console.error('Error: Both key and value are required for "set" action.');
-        process.exit(1);
-      }
-
-      // Try to parse value as JSON if possible (for numbers, booleans, arrays, objects)
-      let parsedValue = value;
-      try {
-        parsedValue = JSON.parse(value);
-      } catch (e) {
-        // Keep as string if parsing fails
-      }
-
-      this.configManager.set(key, parsedValue);
-      console.log(`Successfully set "${key}" to: ${JSON.stringify(parsedValue)}`);
-    } else if (action === 'delete') {
-      if (!key) {
-        console.error('Error: Key is required for "delete" action.');
-        process.exit(1);
-      }
-      this.configManager.delete(key);
-      console.log(`Successfully deleted "${key}"`);
-    } else if (action === 'list') {
-      const config = this.configManager.list();
-      console.log(JSON.stringify(config, null, 2));
-    } else {
-      console.error(`Error: Unknown action "${action}". Supported actions: get, set, delete, list`);
-      process.exit(1);
+      result = AutomationResult.success({ action, key, value: val });
+      this.renderHuman(result, options);
+      return result;
     }
+
+    if (action === 'list') {
+      result = AutomationResult.success({ action, value: this.configManager.list() });
+      this.renderHuman(result, options);
+      return result;
+    }
+
+    if (action === 'set') {
+      let parsedValue = value;
+      try { parsedValue = JSON.parse(value); } catch (_) { /* keep string */ }
+      const changed = this.configManager.set(key, parsedValue);
+      if (!changed) result = AutomationResult.failure(ExitCodes.CONFIGURATION_ERROR, `Unable to set configuration key "${key}".`);
+      else result = AutomationResult.success({ action, key, value: parsedValue });
+      this.renderHuman(result, options);
+      return result;
+    }
+
+    const changed = this.configManager.delete(key);
+    if (!changed) result = AutomationResult.failure(ExitCodes.CONFIGURATION_ERROR, `Unable to delete configuration key "${key}".`);
+    else result = AutomationResult.success({ action, key });
+    this.renderHuman(result, options);
+    return result;
   }
 }
 

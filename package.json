@@ -4,10 +4,11 @@
   "description": "Unified command-line control plane for the Yasin ecosystem.",
   "main": "src/index.js",
   "bin": {
-    "yasin": "./yasin.sh"
+    "yasin": "./bin/yasin.js"
   },
   "files": [
     "src/",
+    "bin/",
     "yasin.sh",
     "README.md",
     "LICENSE",
@@ -15,10 +16,11 @@
   ],
   "scripts": {
     "test": "jest",
-    "lint": "eslint src tests",
+    "lint": "eslint src tests bin",
     "smoke": "node tests/smoke.js",
     "pack:check": "npm pack --dry-run",
-    "release:check": "npm test && npm run lint && npm run smoke && npm run pack:check && npm audit --omit=dev"
+    "release:install": "node tests/release-install.js",
+    "release:check": "npm test && npm run lint && npm run smoke && npm run pack:check && npm run release:install && npm audit --omit=dev"
   },
   "repository": {
     "type": "git",

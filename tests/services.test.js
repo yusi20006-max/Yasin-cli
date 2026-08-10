@@ -55,8 +55,18 @@ describe('ServiceManager & ServiceCommand', () => {
     expect(details.status).toBe('running'); expect(details.pid).toBeGreaterThan(0); expect(serviceManager.isProcessRunning(details.pid)).toBe(true);
     expect(serviceManager.listServices()[0].status).toBe('running');
     expect(serviceManager.stopService('ping-loop')).toBe(true);
-    await new Promise(resolve => setTimeout(resolve, 200));
-    expect(serviceManager.isProcessRunning(details.pid)).toBe(false); expect(serviceManager.listServices()[0].status).toBe('stopped'); expect(serviceManager.listServices()[0].pid).toBeNull();
+
+    // Polling with timeout to wait for the background process to shut down cleanly
+    const startTime = Date.now();
+    let isRunning = true;
+    while (isRunning && Date.now() - startTime < 3000) {
+      isRunning = serviceManager.isProcessRunning(details.pid);
+      if (isRunning) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    }
+
+    expect(isRunning).toBe(false); expect(serviceManager.listServices()[0].status).toBe('stopped'); expect(serviceManager.listServices()[0].pid).toBeNull();
   });
 
   it('should support register CLI action', () => {

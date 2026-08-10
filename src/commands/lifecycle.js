@@ -1,20 +1,56 @@
 const Command = require('../core/Command');
+const AutomationResult = require('../output/AutomationResult');
 
 class LifecycleCommand extends Command {
-  constructor(action, orchestrator) {
+  constructor(action, target) {
     super({
       name: action,
       description: `${action} Yasin ecosystem services`,
-      args: [{ name: 'service', required: false, description: 'Service id or all' }]
+      args: [{ name: 'service', required: false, description: 'Service id or all' }],
+      supportsJson: true
     });
     this.action = action;
-    this.orchestrator = orchestrator;
+    this.target = target;
   }
 
-  execute(args) {
-    const target = args[0] || 'all';
-    const result = this.orchestrator[this.action](target);
-    console.log(JSON.stringify(result, null, 2));
+  execute(args, options = {}) {
+    const service = args[0] || 'all';
+    let result;
+
+    if (this.target && !Array.isArray(this.target) && typeof this.target.execute === 'function') {
+      result = this.target.execute(this.action, service, args.slice(1), options);
+    } else if (this.target && !Array.isArray(this.target) && typeof this.target[this.action] === 'function') {
+      result = AutomationResult.success(this.target[this.action](service));
+    } else if (Array.isArray(this.target)) {
+      const adapters = service === 'all'
+        ? this.target
+        : this.target.filter(adapter => adapter.serviceId === service);
+
+      if (service !== 'all' && adapters.length === 0) {
+        throw new Error(`Unknown ecosystem service: ${service}`);
+      }
+
+      const services = adapters.map(adapter => {
+        const capabilities = typeof adapter.capabilities === 'function' ? adapter.capabilities() : {};
+        if (capabilities[this.action] === false || typeof adapter[this.action] !== 'function') {
+          return { service: adapter.serviceId, status: 'skipped' };
+        }
+        try {
+          const data = adapter[this.action](args.slice(1), options);
+          return { service: adapter.serviceId, status: 'ok', ...(data && typeof data === 'object' ? data : { data }) };
+        } catch (error) {
+          return { service: adapter.serviceId, status: 'error', error: { message: error.message } };
+        }
+      });
+      result = AutomationResult.success({ services });
+    } else {
+      throw new Error(`No service operation backend configured for ${this.action}`);
+    }
+
+    if (!result || typeof result !== 'object' || typeof result.ok !== 'boolean') {
+      result = AutomationResult.success(result);
+    }
+
     return result;
   }
 }

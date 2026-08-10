@@ -4,6 +4,11 @@ const ConfigManager = require('./config/ConfigManager');
 const CommandRegistry = require('./core/CommandRegistry');
 const ServiceManager = require('./services/ServiceManager');
 const PluginSystem = require('./plugins/PluginSystem');
+const ServiceResolver = require('./core/ServiceResolver');
+const ServiceOperation = require('./core/ServiceOperation');
+const ServiceHealthOperation = require('./core/ServiceHealthOperation');
+const ServiceStatusOperation = require('./core/ServiceStatusOperation');
+const { normalize } = require('./output/ErrorTaxonomy');
 
 const ConfigCommand = require('./commands/config');
 const DoctorCommand = require('./commands/doctor');
@@ -18,7 +23,6 @@ const ProfileCommand = require('./commands/profile');
 const CreateCommand = require('./commands/create');
 
 const { createEcosystemAdapters } = require('./ecosystem');
-const EcosystemOrchestrator = require('./ecosystem/Orchestrator');
 const ProfileManager = require('./ecosystem/ProfileManager');
 
 const CoreCommand = require('./commands/core');
@@ -35,21 +39,23 @@ function bootstrap() {
 
     const adapters = createEcosystemAdapters(configManager, serviceManager);
     const [coreAdapter, agentAdapter, hubAdapter, relayAdapter] = adapters;
-    const dependencies = configManager.get('dependencies') || {};
-    const orchestrator = new EcosystemOrchestrator(adapters, dependencies);
+    const resolver = new ServiceResolver(adapters);
+    const serviceOperation = new ServiceOperation(resolver);
+    const serviceHealthOperation = new ServiceHealthOperation(resolver);
+    const serviceStatusOperation = new ServiceStatusOperation(resolver);
     const profileManager = new ProfileManager(configManager);
 
     registry.register(new ConfigCommand(configManager));
     registry.register(new DoctorCommand(configManager));
-    registry.register(new StatusCommand(configManager, serviceManager, pluginSystem));
+    registry.register(new StatusCommand(configManager, serviceManager, pluginSystem, serviceStatusOperation));
     registry.register(new ServiceCommand(serviceManager));
     registry.register(new PluginCommand(pluginSystem));
     registry.register(new DiscoverCommand(adapters));
-    registry.register(new HealthCommand(adapters));
+    registry.register(new HealthCommand(serviceHealthOperation));
     registry.register(new LogsCommand(serviceManager));
-    registry.register(new LifecycleCommand('start', orchestrator));
-    registry.register(new LifecycleCommand('stop', orchestrator));
-    registry.register(new LifecycleCommand('restart', orchestrator));
+    registry.register(new LifecycleCommand('start', serviceOperation));
+    registry.register(new LifecycleCommand('stop', serviceOperation));
+    registry.register(new LifecycleCommand('restart', serviceOperation));
     registry.register(new ProfileCommand(profileManager));
     registry.register(new CreateCommand());
 
@@ -58,13 +64,20 @@ function bootstrap() {
     registry.register(new HubCommand(hubAdapter));
     registry.register(new RelayCommand(relayAdapter));
 
+    registry.serviceOperations = {
+      status: serviceStatusOperation,
+      health: serviceHealthOperation,
+      lifecycle: serviceOperation
+    };
+
     pluginSystem.loadPlugins();
 
     const args = process.argv.slice(2);
     return registry.dispatch(args);
   } catch (err) {
-    console.error('Fatal Error during Yasin CLI bootstrap:', err.message);
-    process.exit(1);
+    const normalized = normalize(err);
+    console.error('Fatal Error during Yasin CLI bootstrap:', normalized.message);
+    process.exit(normalized.code);
   }
 }
 

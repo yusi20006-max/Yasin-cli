@@ -3,7 +3,8 @@ class Command {
     this.name = options.name || '';
     this.description = options.description || '';
     this.args = options.args || []; // e.g., [{ name: 'key', required: true, description: '...' }]
-    this.options = options.options || []; // e.g., [{ name: 'port', alias: 'p', type: 'number', default: 3000, description: '...' }]
+    this.options = options.options || []; // e.g., [{ name: '--port', alias: '-p', type: 'number', default: 3000, description: '...' }]
+    this.supportsJson = options.supportsJson === true;
   }
 
   execute(args, options) {
@@ -14,7 +15,6 @@ class Command {
     const parsedOpts = {};
     const parsedArgs = [];
 
-    // Initialize option defaults
     for (const opt of this.options) {
       const cleanName = opt.name.replace(/^-+/, '');
       if (opt.default !== undefined) {
@@ -44,7 +44,6 @@ class Command {
           name = arg.slice(1);
         }
 
-        // Find matching option definition by name or alias
         const optDef = this.options.find(opt => {
           const cleanName = opt.name.replace(/^-+/, '');
           const cleanAlias = opt.alias ? opt.alias.replace(/^-+/, '') : null;
@@ -56,7 +55,6 @@ class Command {
           if (optDef.type === 'boolean') {
             parsedOpts[cleanName] = true;
           } else {
-            // It needs a value
             if (value !== null) {
               parsedOpts[cleanName] = this.castType(value, optDef.type);
             } else if (i + 1 < rawArgs.length && !rawArgs[i + 1].startsWith('-')) {
@@ -67,7 +65,6 @@ class Command {
             }
           }
         } else {
-          // Store unknown option with its literal name
           parsedOpts[name] = value !== null ? value : true;
         }
       } else {

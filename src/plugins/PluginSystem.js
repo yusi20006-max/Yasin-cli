@@ -7,13 +7,12 @@ class PluginSystem {
     this.registry = commandRegistry;
     this.serviceManager = serviceManager;
     this.pluginsDir = path.resolve(path.join(this.configManager.configDir, 'plugins'));
+    this.lastLoadDiagnostics = [];
     this.ensureDirectoryExists();
   }
 
   ensureDirectoryExists() {
-    if (!fs.existsSync(this.pluginsDir)) {
-      fs.mkdirSync(this.pluginsDir, { recursive: true });
-    }
+    if (!fs.existsSync(this.pluginsDir)) fs.mkdirSync(this.pluginsDir, { recursive: true });
   }
 
   isValidPluginId(id) {
@@ -27,11 +26,9 @@ class PluginSystem {
   }
 
   getPluginDir(id) {
-    if (!this.isValidPluginId(id)) {
-      throw new Error(`Invalid plugin id "${id}".`);
-    }
+    if (!this.isValidPluginId(id)) throw new Error(`Invalid plugin id "${id}".`);
     const resolved = this.resolveInside(this.pluginsDir, path.join(this.pluginsDir, id));
-    if (!resolved) throw new Error(`Plugin path escapes the plugin directory.`);
+    if (!resolved) throw new Error('Plugin path escapes the plugin directory.');
     return resolved;
   }
 
@@ -44,19 +41,12 @@ class PluginSystem {
     let meta = null;
     const yasinMetaPath = path.join(source, 'yasin-plugin.json');
     const pkgMetaPath = path.join(source, 'package.json');
-
     if (fs.existsSync(yasinMetaPath)) {
       meta = JSON.parse(fs.readFileSync(yasinMetaPath, 'utf8'));
     } else if (fs.existsSync(pkgMetaPath)) {
       const pkg = JSON.parse(fs.readFileSync(pkgMetaPath, 'utf8'));
       if (pkg.yasinPlugin) {
-        meta = {
-          id: pkg.name,
-          name: pkg.name,
-          version: pkg.version || '1.0.0',
-          description: pkg.description || '',
-          main: pkg.main || 'index.js'
-        };
+        meta = { id: pkg.name, name: pkg.name, version: pkg.version || '1.0.0', description: pkg.description || '', main: pkg.main || 'index.js' };
       }
     }
 
@@ -65,34 +55,23 @@ class PluginSystem {
     }
 
     const destDir = this.getPluginDir(meta.id);
-    if (fs.existsSync(destDir)) {
-      fs.rmSync(destDir, { recursive: true, force: true });
-    }
-
+    if (fs.existsSync(destDir)) fs.rmSync(destDir, { recursive: true, force: true });
     fs.cpSync(source, destDir, { recursive: true });
 
     const pluginsConfig = this.configManager.get('plugins') || {};
     pluginsConfig[meta.id] = {
-      id: meta.id,
-      name: meta.name || meta.id,
-      version: meta.version || '1.0.0',
-      description: meta.description || '',
-      main: meta.main || 'index.js',
-      enabled: true,
-      installedAt: Date.now()
+      id: meta.id, name: meta.name || meta.id, version: meta.version || '1.0.0',
+      description: meta.description || '', main: meta.main || 'index.js', enabled: true, installedAt: Date.now()
     };
     this.configManager.set('plugins', pluginsConfig);
-
     return pluginsConfig[meta.id];
   }
 
   uninstallPlugin(id) {
     const pluginsConfig = this.configManager.get('plugins') || {};
     if (!pluginsConfig[id]) throw new Error(`Plugin "${id}" is not installed.`);
-
     const destDir = this.getPluginDir(id);
     if (fs.existsSync(destDir)) fs.rmSync(destDir, { recursive: true, force: true });
-
     delete pluginsConfig[id];
     this.configManager.set('plugins', pluginsConfig);
     return true;
@@ -115,13 +94,13 @@ class PluginSystem {
   }
 
   listPlugins() {
-    const pluginsConfig = this.configManager.get('plugins') || {};
-    return Object.values(pluginsConfig);
+    return Object.values(this.configManager.get('plugins') || {});
   }
 
   loadPlugins() {
     const pluginsConfig = this.configManager.get('plugins') || {};
     const loaded = [];
+    this.lastLoadDiagnostics = [];
 
     Object.keys(pluginsConfig).forEach(id => {
       const plugin = pluginsConfig[id];
@@ -131,38 +110,27 @@ class PluginSystem {
       try {
         pluginDir = this.getPluginDir(id);
       } catch (err) {
-        console.error(`Error loading plugin "${id}": ${err.message}`);
+        this.lastLoadDiagnostics.push({ plugin: id, status: 'error', code: 'PLUGIN_PATH_ERROR', message: err.message });
         return;
       }
 
       const entryFile = this.resolveInside(pluginDir, path.join(pluginDir, plugin.main || 'index.js'));
       if (!entryFile || !fs.existsSync(entryFile) || !fs.statSync(entryFile).isFile()) {
-        console.warn(`Warning: Entry file for plugin "${id}" is missing or outside its plugin directory.`);
+        this.lastLoadDiagnostics.push({ plugin: id, status: 'error', code: 'PLUGIN_ENTRY_MISSING', message: 'Entry file is missing or outside the plugin directory.' });
         return;
       }
 
       try {
         const moduleExports = require(entryFile);
-        const context = {
-          registry: this.registry,
-          configManager: this.configManager,
-          serviceManager: this.serviceManager,
-          pluginSystem: this
-        };
-
-        if (typeof moduleExports === 'function') {
-          moduleExports(context);
-        } else if (moduleExports && typeof moduleExports.init === 'function') {
-          moduleExports.init(context);
-        } else if (moduleExports && typeof moduleExports.register === 'function') {
-          moduleExports.register(context);
-        } else {
-          throw new Error('Plugin does not export an initialization function or init/register method.');
-        }
-
+        const context = { registry: this.registry, configManager: this.configManager, serviceManager: this.serviceManager, pluginSystem: this };
+        if (typeof moduleExports === 'function') moduleExports(context);
+        else if (moduleExports && typeof moduleExports.init === 'function') moduleExports.init(context);
+        else if (moduleExports && typeof moduleExports.register === 'function') moduleExports.register(context);
+        else throw new Error('Plugin does not export an initialization function or init/register method.');
         loaded.push(id);
+        this.lastLoadDiagnostics.push({ plugin: id, status: 'loaded' });
       } catch (err) {
-        console.error(`Error loading plugin "${id}": ${err.message}`);
+        this.lastLoadDiagnostics.push({ plugin: id, status: 'error', code: 'PLUGIN_LOAD_ERROR', message: err.message });
       }
     });
 
