@@ -31,6 +31,35 @@ describe('Ecosystem Adapters', () => {
     expect(() => adapter.start()).toThrow('library-only');
   });
 
+  test('regression: a fresh adapter with no run command still auto-registers its own default versionCommandArgs (not silently dropped to [])', () => {
+    // Reproduces the real yasin-core scenario: no defaultCommand at all (mode:
+    // 'library'), only a defaultVersionCommand + defaultVersionCommandArgs
+    // pair supplied directly in the definition, with nothing pre-populated in
+    // config. Previously, BaseEcosystemAdapter's constructor never stored
+    // definition.defaultVersionCommandArgs, and resolveDefinition()'s fallback
+    // for versionCommandArgs only worked when versionCommand === command --
+    // which is never true here, since command is null. That silently produced
+    // versionCommandArgs: [], so version() ran the interpreter with zero
+    // arguments and always returned { version: null, status: 'unknown' }.
+    class FakeLibraryAdapter extends require('../src/adapters/BaseEcosystemAdapter') {
+      constructor(cfg, mgr) {
+        super(cfg, mgr, {
+          serviceId: 'fake-lib',
+          configKey: 'fake',
+          envPrefix: 'FAKE_LIB',
+          serviceName: 'Fake Library',
+          mode: 'library',
+          defaultVersionCommand: nodeCommand,
+          defaultVersionCommandArgs: ['-e', 'console.log("9.9.9")']
+        });
+      }
+    }
+    const adapter = new FakeLibraryAdapter(config, manager);
+    const result = adapter.version();
+    expect(result.status).toBe('ok');
+    expect(result.version).toBe('9.9.9');
+  });
+
   test('Agent is an on-demand service', () => {
     configure(config, 'yasin-agent', 'Yasin-Agent', 'oneshot', nodeRunArgs);
     const adapter = new AgentAdapter(config, manager);

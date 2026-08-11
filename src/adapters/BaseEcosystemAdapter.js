@@ -13,6 +13,9 @@ class BaseEcosystemAdapter {
     this.defaultCommand = definition.defaultCommand || null;
     this.defaultArgs = definition.defaultArgs || [];
     this.defaultVersionCommand = definition.defaultVersionCommand || null;
+    this.defaultVersionCommandArgs = Array.isArray(definition.defaultVersionCommandArgs)
+      ? definition.defaultVersionCommandArgs
+      : null;
     this.ensureRegistered();
   }
 
@@ -28,7 +31,9 @@ class BaseEcosystemAdapter {
     const versionCommand = configured.versionCommand || this.defaultVersionCommand || command;
     const versionCommandArgs = Array.isArray(configured.versionCommandArgs)
       ? configured.versionCommandArgs
-      : (versionCommand === command ? versionArgs : []);
+      : (this.defaultVersionCommandArgs
+          ? [...this.defaultVersionCommandArgs]
+          : (versionCommand === command ? versionArgs : []));
     const env = configured.env && typeof configured.env === 'object' ? configured.env : {};
     const workingDirectory = configured.workingDirectory || process.env[`${this.envPrefix}_WORKDIR`];
     const mode = configured.mode || this.mode;
