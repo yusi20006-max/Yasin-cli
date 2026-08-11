@@ -1,4 +1,5 @@
 const LifecycleCommand = require('../src/commands/lifecycle');
+const EcosystemOrchestrator = require('../src/ecosystem/Orchestrator');
 
 describe('ecosystem lifecycle command', () => {
   test('starts all supported daemon adapters and skips unsupported services', () => {
@@ -16,7 +17,8 @@ describe('ecosystem lifecycle command', () => {
       }
     ];
 
-    const command = new LifecycleCommand('start', adapters);
+    const orchestrator = new EcosystemOrchestrator(adapters);
+    const command = new LifecycleCommand('start', orchestrator);
     const result = command.execute(['all']);
 
     expect(calls).toEqual(['relay']);
@@ -25,7 +27,8 @@ describe('ecosystem lifecycle command', () => {
   });
 
   test('rejects unknown service', () => {
-    const command = new LifecycleCommand('stop', []);
+    const orchestrator = new EcosystemOrchestrator([]);
+    const command = new LifecycleCommand('stop', orchestrator);
     expect(() => command.execute(['unknown'])).toThrow('Unknown ecosystem service');
   });
 });

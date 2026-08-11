@@ -44,7 +44,7 @@ class ProjectScaffolder {
       main: 'index.js'
     }, null, 2) + '\n');
     this.write(target, 'index.js', "module.exports = function init({ registry }) {\n  // Register plugin commands here.\n  void registry;\n};\n");
-    this.write(target, 'README.md', `# ${name}\n\nYasinCLI plugin scaffold.\n\n## Development\n\nImplement the plugin entry point in \\`index.js\\`.\n`);
+    this.write(target, 'README.md', `# ${name}\n\nYasinCLI plugin scaffold.\n\n## Development\n\nImplement the plugin entry point in \`index.js\`.\n`);
     return { type: 'plugin', name, path: target };
   }
 
@@ -59,7 +59,8 @@ class ProjectScaffolder {
   createAdapter(name) {
     const target = this.resolveTarget(name);
     this.ensureEmpty(target);
-    const className = `${name.replace(/(^|[-_])([a-z])/g, (_, p, c) => c.toUpperCase())}Adapter`;
+    const pascal = name.replace(/(^|[-_])([a-z])/g, (_, p, c) => c.toUpperCase());
+    const className = /adapter$/i.test(pascal) ? pascal : `${pascal}Adapter`;
     this.write(target, `${className}.js`, `const BaseEcosystemAdapter = require('yasin-cli/src/adapters/BaseEcosystemAdapter');\n\nclass ${className} extends BaseEcosystemAdapter {\n  constructor(configManager, serviceManager) {\n    super(configManager, serviceManager, {\n      serviceId: '${name}',\n      configKey: '${name}',\n      envPrefix: '${name.toUpperCase().replace(/[^A-Z0-9]/g, '_')}',\n      serviceName: '${name}',\n      mode: 'daemon'\n    });\n  }\n}\n\nmodule.exports = ${className};\n`);
     this.write(target, 'README.md', `# ${className}\n\nYasinCLI adapter scaffold.\n`);
     return { type: 'adapter', name, path: target, className };

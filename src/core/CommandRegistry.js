@@ -108,16 +108,7 @@ class CommandRegistry {
   }
 
   printVersion() {
-    let version = '1.0.0';
-    try {
-      const pkgPath = path.join(__dirname, '..', '..', 'package.json');
-      if (fs.existsSync(pkgPath)) {
-        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-        version = pkg.version || version;
-      }
-    } catch (e) {
-      // ignore
-    }
+    const version = require('./version').getVersion();
     console.log(`Yasin CLI v${version}`);
   }
 
