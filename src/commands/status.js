@@ -1,7 +1,5 @@
 const Command = require('../core/Command');
 const os = require('os');
-const path = require('path');
-const fs = require('fs');
 
 class StatusCommand extends Command {
   constructor(configManager, serviceManager = null, pluginSystem = null) {
@@ -18,16 +16,7 @@ class StatusCommand extends Command {
     console.log('=== Yasin CLI Status ===\n');
 
     // 1. CLI Metadata
-    let version = '1.0.0';
-    try {
-      const pkgPath = path.join(__dirname, '..', '..', 'package.json');
-      if (fs.existsSync(pkgPath)) {
-        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-        version = pkg.version || version;
-      }
-    } catch (e) {
-      // ignore
-    }
+    const version = require('../core/version').getVersion();
 
     console.log(`CLI Version:       v${version}`);
     console.log(`Config Directory:  ${this.configManager.configDir}`);
