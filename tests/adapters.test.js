@@ -31,6 +31,17 @@ describe('Ecosystem Adapters', () => {
     expect(() => adapter.start()).toThrow('library-only');
   });
 
+  test('Configured mode overrides adapter default mode for doctor and capabilities', () => {
+    configure(config, 'yasin-relay', 'YasinRelay', 'oneshot', nodeRunArgs);
+    const adapter = new RelayAdapter(config, manager);
+    const diagnosis = adapter.doctor();
+    expect(diagnosis.status).toBe('healthy');
+    expect(diagnosis.detection.mode).toBe('oneshot');
+    expect(diagnosis.checks.find(check => check.name === 'YasinRelay process state').status).toBe('PASS');
+    expect(adapter.capabilities().run).toBe(true);
+    expect(adapter.capabilities().start).toBe(false);
+  });
+
   test('Agent is an on-demand service', () => {
     configure(config, 'yasin-agent', 'Yasin-Agent', 'oneshot', nodeRunArgs);
     const adapter = new AgentAdapter(config, manager);

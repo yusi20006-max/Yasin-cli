@@ -35,6 +35,10 @@ class BaseEcosystemAdapter {
     return { command, args, versionArgs, versionCommand, versionCommandArgs, env, workingDirectory, mode };
   }
 
+  getEffectiveMode() {
+    return this.getConfiguredService().mode || this.mode;
+  }
+
   ensureRegistered() {
     const definition = this.resolveDefinition();
     const services = this.configManager.get('services') || {};
@@ -62,13 +66,14 @@ class BaseEcosystemAdapter {
   }
 
   capabilities() {
+    const mode = this.getEffectiveMode();
     return {
-      start: this.mode === 'daemon',
-      stop: this.mode === 'daemon',
-      restart: this.mode === 'daemon',
-      run: this.mode === 'oneshot',
+      start: mode === 'daemon',
+      stop: mode === 'daemon',
+      restart: mode === 'daemon',
+      run: mode === 'oneshot',
       version: true,
-      status: this.mode === 'daemon',
+      status: mode === 'daemon',
       doctor: true,
       health: true,
       config: true
@@ -123,10 +128,11 @@ class BaseEcosystemAdapter {
     const detection = this.detect();
     const status = this.status();
     const version = this.version();
+    const mode = detection.mode;
     const checks = [
       { name: `${this.serviceName} configured`, status: detection.configured ? 'PASS' : 'FAIL' },
       { name: `${this.serviceName} mode`, status: detection.configured ? 'PASS' : 'WARN' },
-      { name: `${this.serviceName} process state`, status: this.mode !== 'daemon' ? 'PASS' : status.status === 'running' ? 'PASS' : status.status === 'stopped' ? 'WARN' : 'FAIL' },
+      { name: `${this.serviceName} process state`, status: mode !== 'daemon' ? 'PASS' : status.status === 'running' ? 'PASS' : status.status === 'stopped' ? 'WARN' : 'FAIL' },
       { name: `${this.serviceName} version`, status: version.status === 'ok' ? 'PASS' : 'WARN' }
     ];
     const failed = checks.some(check => check.status === 'FAIL');
@@ -148,17 +154,17 @@ class BaseEcosystemAdapter {
 
   start() {
     this.ensureRegistered();
-    if (this.mode !== 'daemon') throw new Error(`${this.serviceName} is ${this.mode}-only; use its run operation instead of start/stop.`);
+    if (this.getEffectiveMode() !== 'daemon') throw new Error(`${this.serviceName} is ${this.getEffectiveMode()}-only; use its run operation instead of start/stop.`);
     return this.serviceManager.startService(this.serviceId);
   }
 
   stop() {
-    if (this.mode !== 'daemon') throw new Error(`${this.serviceName} is ${this.mode}-only and has no managed background process.`);
+    if (this.getEffectiveMode() !== 'daemon') throw new Error(`${this.serviceName} is ${this.getEffectiveMode()}-only and has no managed background process.`);
     return this.serviceManager.stopService(this.serviceId);
   }
 
   restart() {
-    if (this.mode !== 'daemon') throw new Error(`${this.serviceName} is ${this.mode}-only and cannot be restarted as a daemon.`);
+    if (this.getEffectiveMode() !== 'daemon') throw new Error(`${this.serviceName} is ${this.getEffectiveMode()}-only and cannot be restarted as a daemon.`);
     this.stop();
     return this.start();
   }
@@ -166,7 +172,7 @@ class BaseEcosystemAdapter {
   run() {
     const service = this.getService();
     if (!service || !service.command) throw new Error(`${this.serviceName} has no executable command configured.`);
-    if (this.mode !== 'oneshot') throw new Error(`${this.serviceName} is not an on-demand service.`);
+    if (this.getEffectiveMode() !== 'oneshot') throw new Error(`${this.serviceName} is not an on-demand service.`);
     return child_process.spawnSync(service.command, [...(service.args || [])], {
       cwd: service.workingDirectory || undefined,
       env: { ...process.env, ...(service.env || {}) },

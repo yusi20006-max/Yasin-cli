@@ -5,12 +5,13 @@ const path = require('path');
 
 const root = path.resolve(__dirname, '..');
 const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'yasin-cli-release-'));
+let tarballPath = null;
 
 try {
-  const tarball = execFileSync('npm', ['pack', '--silent'], { cwd: root, encoding: 'utf8' }).trim().split(/\r?\n/).pop();
-  if (!tarball) throw new Error('npm pack did not produce a tarball name.');
+  const tarballName = execFileSync('npm', ['pack', '--silent'], { cwd: root, encoding: 'utf8' }).trim().split(/\r?\n/).pop();
+  if (!tarballName) throw new Error('npm pack did not produce a tarball name.');
 
-  const tarballPath = path.join(root, tarball);
+  tarballPath = path.join(root, tarballName);
   execFileSync('npm', ['install', '--ignore-scripts', '--prefix', tempDir, tarballPath], {
     cwd: root,
     stdio: 'inherit'
@@ -20,13 +21,15 @@ try {
   const binPath = path.join(tempDir, 'node_modules', '.bin', binName);
   if (!fs.existsSync(binPath)) throw new Error(`Installed CLI executable not found: ${binPath}`);
 
-  execFileSync(binPath, ['--version'], { cwd: tempDir, stdio: 'inherit' });
+  if (process.platform === 'win32') {
+    execFileSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', binPath, '--version'], { cwd: tempDir, stdio: 'inherit' });
+  } else {
+    execFileSync(binPath, ['--version'], { cwd: tempDir, stdio: 'inherit' });
+  }
   console.log('Clean package install and installed yasin executable check passed.');
 } finally {
-  try {
-    const entries = fs.readdirSync(root).filter(name => name.startsWith('yasin-cli-') && name.endsWith('.tgz'));
-    for (const entry of entries) fs.rmSync(path.join(root, entry), { force: true });
-  } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+  if (tarballPath) {
+    try { fs.rmSync(tarballPath, { force: true }); } catch (e) {}
   }
+  fs.rmSync(tempDir, { recursive: true, force: true });
 }
