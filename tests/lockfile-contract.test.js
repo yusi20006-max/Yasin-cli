@@ -54,7 +54,11 @@ describe('package-lock.json contract', () => {
     expect(() => {
       execFileSync('npm', ['ci', '--ignore-scripts', '--dry-run'], {
         cwd: path.join(__dirname, '..'),
-        stdio: 'pipe'
+        stdio: 'pipe',
+        // On Windows, `npm` resolves to npm.cmd, which execFileSync
+        // cannot invoke directly without a shell (it throws ENOENT).
+        // POSIX doesn't need this, but passing it there is harmless.
+        shell: process.platform === 'win32'
       });
     }).not.toThrow();
   });
