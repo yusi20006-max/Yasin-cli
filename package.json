@@ -4,14 +4,15 @@
   "description": "Unified command-line control plane for the Yasin ecosystem.",
   "main": "src/index.js",
   "bin": {
-    "yasin": "./yasin.sh"
+    "yasin": "./bin/yasin.js"
   },
   "files": [
     "src/",
     "yasin.sh",
     "README.md",
     "LICENSE",
-    "docs/"
+    "docs/",
+    "bin/"
   ],
   "scripts": {
     "test": "jest",
