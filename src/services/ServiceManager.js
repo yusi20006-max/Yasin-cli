@@ -55,7 +55,21 @@ class ServiceManager {
     const services = this.configManager.get('services') || {}; const service = services[id]; const state = this.states[id];
     if (!state || !state.pid) { this.states[id] = { status: 'stopped', pid: null }; this.saveStates(); return false; }
     if (!this.isProcessOwned(state, service)) { this.states[id] = { ...state, pid: null, status: 'unknown', endTime: Date.now() }; this.saveStates(); return false; }
-    let terminated = false; try { if (process.platform === 'win32') child_process.execFileSync('taskkill', ['/pid', String(state.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true }); else process.kill(state.pid, 'SIGTERM'); terminated = true; } catch (e) { try { process.kill(state.pid, 'SIGKILL'); terminated = true; } catch (err) { terminated = false; } }
+    let terminated = false;
+    try {
+      if (process.platform === 'win32') {
+        child_process.execFileSync('taskkill', ['/pid', String(state.pid), '/T', '/F'], {
+          stdio: 'ignore',
+          windowsHide: true,
+          timeout: 1500,
+        });
+      } else {
+        process.kill(state.pid, 'SIGTERM');
+      }
+      terminated = true;
+    } catch (e) {
+      try { process.kill(state.pid, 'SIGKILL'); terminated = true; } catch (err) { terminated = false; }
+    }
     this.states[id] = { pid: null, status: terminated ? 'stopped' : 'failed', endTime: Date.now() }; this.saveStates(); return terminated;
   }
   listServices() {
