@@ -2,9 +2,9 @@ name: Phase 4.5.1 CI
 
 on:
   push:
-    branches: ["initial-setup"]
+    branches: ["main", "initial-setup"]
   pull_request:
-    branches: ["initial-setup"]
+    branches: ["main", "initial-setup"]
   workflow_dispatch:
 
 permissions:
