@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-
-# Determine the directory of the script
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-
-# Execute node src/index.js with arguments
-node "$DIR/src/index.js" "$@"
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Compatibility wrapper → same entry as bin/yasin.js
+exec node "$DIR/src/index.js" "$@"
