@@ -19,7 +19,7 @@
     "lint": "eslint src tests",
     "smoke": "node tests/smoke.js",
     "pack:check": "npm pack --dry-run",
-    "release:check": "npm test && npm run lint && npm run smoke && npm run pack:check && npm audit --omit=dev"
+    "release:check": "node scripts/release-check.js"
   },
   "repository": {
     "type": "git",

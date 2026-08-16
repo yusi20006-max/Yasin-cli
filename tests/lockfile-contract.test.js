@@ -1,21 +1,12 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-// This test exists to satisfy the "Lockfile contract" step in
-// .github/workflows/phase-4-5-1-ci.yml, which referenced this file
-// before it existed -- causing every OS/Node combination in that
-// matrix to fail identically with "No tests found, exiting with
-// code 1" regardless of any actual code change.
-//
-// It verifies that package.json and package-lock.json agree with
-// each other, so a lockfile that has drifted out of sync (a common
-// source of "works on my machine" CI failures) is caught explicitly
-// instead of surfacing as a confusing downstream install/test error.
-
 describe('package-lock.json contract', () => {
-  const pkgPath = path.join(__dirname, '..', 'package.json');
-  const lockPath = path.join(__dirname, '..', 'package-lock.json');
+  const projectRoot = path.join(__dirname, '..');
+  const pkgPath = path.join(projectRoot, 'package.json');
+  const lockPath = path.join(projectRoot, 'package-lock.json');
 
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
   const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
@@ -30,15 +21,17 @@ describe('package-lock.json contract', () => {
 
   test('every dependency/devDependency in package.json is present in the lockfile root', () => {
     const rootEntry = lock.packages && lock.packages[''];
+
     expect(rootEntry).toBeDefined();
 
     const declared = {
       ...(pkg.dependencies || {}),
-      ...(pkg.devDependencies || {})
+      ...(pkg.devDependencies || {}),
     };
+
     const locked = {
       ...(rootEntry.dependencies || {}),
-      ...(rootEntry.devDependencies || {})
+      ...(rootEntry.devDependencies || {}),
     };
 
     for (const name of Object.keys(declared)) {
@@ -47,19 +40,31 @@ describe('package-lock.json contract', () => {
   });
 
   test('npm ci succeeds against the committed lockfile (no drift)', () => {
-    // A real install exercise, not just a JSON comparison: this is
-    // exactly what CI runs, so if the lockfile is stale this fails
-    // the same way CI would, with a clear message instead of a
-    // confusing downstream failure.
-    expect(() => {
-      execFileSync('npm', ['ci', '--ignore-scripts', '--dry-run'], {
-        cwd: path.join(__dirname, '..'),
-        stdio: 'pipe',
-        // On Windows, `npm` resolves to npm.cmd, which execFileSync
-        // cannot invoke directly without a shell (it throws ENOENT).
-        // POSIX doesn't need this, but passing it there is harmless.
-        shell: process.platform === 'win32'
-      });
-    }).not.toThrow();
+    const isolatedUserConfig = path.join(
+      os.tmpdir(),
+      `yasin-cli-npmrc-${process.pid}-${Date.now()}`
+    );
+
+    fs.writeFileSync(isolatedUserConfig, '', 'utf8');
+
+    try {
+      expect(() => {
+        const env = { ...process.env };
+
+        delete env.npm_config_allow_scripts;
+        delete env.NPM_CONFIG_ALLOW_SCRIPTS;
+
+        env.npm_config_userconfig = isolatedUserConfig;
+
+        execFileSync('npm', ['ci', '--dry-run'], {
+          cwd: projectRoot,
+          stdio: 'pipe',
+          shell: process.platform === 'win32',
+          env,
+        });
+      }).not.toThrow();
+    } finally {
+      fs.rmSync(isolatedUserConfig, { force: true });
+    }
   });
 });
