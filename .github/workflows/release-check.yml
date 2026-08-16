@@ -3,9 +3,11 @@ name: Release Check
 on:
   push:
     branches:
+      - main
       - phase-5-distribution
   pull_request:
     branches:
+      - main
       - initial-setup
 
 jobs:
