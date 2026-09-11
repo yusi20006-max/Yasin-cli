@@ -2,7 +2,7 @@ const Command = require('../core/Command');
 const os = require('os');
 
 class StatusCommand extends Command {
-  constructor(configManager, serviceManager = null, pluginSystem = null) {
+  constructor(configManager, serviceManager = null, pluginSystem = null, hubGateway = null) {
     super({
       name: 'status',
       description: 'Show current CLI status, running services, loaded plugins, and system resources'
@@ -10,6 +10,7 @@ class StatusCommand extends Command {
     this.configManager = configManager;
     this.serviceManager = serviceManager;
     this.pluginSystem = pluginSystem;
+    this.hubGateway = hubGateway;
   }
 
   execute(args, options) {
@@ -82,6 +83,27 @@ class StatusCommand extends Command {
     } else {
       console.log('Plugin System not initialized.');
     }
+
+    // 5. YasinHub Control Plane (only when a Hub gateway is attached;
+    //    without it the report above is byte-identical to previous releases).
+    if (this.hubGateway) {
+      return this.printHubSection();
+    }
+  }
+
+  async printHubSection() {
+    console.log();
+    console.log('--- YasinHub Control Plane ---');
+    const snapshot = await this.hubGateway.hubStatus();
+    if (!snapshot.reachable) {
+      console.log(`Hub:               UNAVAILABLE (${snapshot.error})`);
+      return snapshot;
+    }
+    console.log(`Hub services:      total=${snapshot.total} running=${snapshot.running} failed=${snapshot.failed}`);
+    snapshot.projects.forEach(p => {
+      console.log(`  - [${p.status}] ${p.name} (PID: ${p.pid || 'N/A'})`);
+    });
+    return snapshot;
   }
 
   formatUptime(sec) {

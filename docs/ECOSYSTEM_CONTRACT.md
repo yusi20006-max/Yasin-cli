@@ -13,6 +13,36 @@ Phase 2.5 validates that YasinCLI does not assume every ecosystem repository is 
 
 `YASIN_PYTHON` may be set when the Python executable is not named `python3`.
 
+## YasinHub Control Plane integration (HTTP)
+
+Architecture:
+
+```text
+YasinCLI → YasinHub API → Runit → Yasin Services
+```
+
+YasinHub is the sole Control Plane. Hub-managed services
+(`yasin-agent`, `yasin-ai`, `yasinrelay`, `yasinfeed`, `yasinpress`;
+overridable via CLI config `hub.managedServices`) are routed to the Hub
+HTTP API instead of the CLI's local ServiceManager:
+
+- `yasin status` appends the real Hub snapshot (total/running/failed plus
+  per-service status and PID); an unreachable Hub is reported as
+  `UNAVAILABLE`, never fabricated.
+- `yasin start|stop|restart <service>` issues
+  `POST /api/control/<service>/<action>` and reports the Hub verdict
+  (status, PID, message). Hub refusals fail closed with the Hub reason and
+  a non-zero exit code; the CLI never falls back to direct process control.
+- Connection: CLI config `hub.baseUrl`, else `YASINHUB_BASE_URL` /
+  `YASIN_HUB_URL`, else default `http://127.0.0.1:7000`
+  (local Termux runtime). Timeout: `hub.timeoutMs` /
+  `YASINHUB_TIMEOUT_MS`, default 30000ms.
+- No secrets are sent or stored: the integration carries no tokens and
+  redacts token-like patterns from displayed errors.
+
+Runit stays behind YasinHub; PID/port ownership checks stay inside
+YasinHub. The CLI is a client/interface only.
+
 ## Configuration override
 
 Each adapter can override its command contract through `services.<service-id>` in YasinCLI configuration.
