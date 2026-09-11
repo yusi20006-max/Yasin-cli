@@ -1,12 +1,27 @@
 # ADR-001: YasinHub Transport Boundary
 
-Status: Proposed
+Status: Implemented (HTTP transport selected)
 
 ## Decision
 
 Keep the YasinCLI ↔ YasinHub contract transport-neutral. Do not hard-code HTTP, sockets, or direct Hub module imports into the CLI.
 
 The first production transport should be selected only after YasinHub exposes a stable public control surface.
+
+## Selected transport (YasinHub v1.0.1)
+
+YasinHub now exposes a stable, verified HTTP control API
+(default `http://127.0.0.1:7000`), so the concrete transport adapter is HTTP:
+
+- `GET /api/health` — Control Plane liveness
+- `GET /api/status` — real per-service snapshot (status, PID, process state)
+- `GET /api/services` — Hub-managed service inventory
+- `POST /api/control/<service>/<start|stop|restart>` — lifecycle operations
+
+Implementation: `src/hub/HubClient.js` (transport only, global fetch, bounded
+timeouts, validated responses) behind `src/hub/HubLifecycle.js` (gateway).
+The command layer depends on the gateway interface, never on HTTP details,
+so the transport stays replaceable per this ADR.
 
 ## Required properties
 

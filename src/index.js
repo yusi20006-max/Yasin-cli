@@ -25,6 +25,7 @@ const CoreCommand = require('./commands/core');
 const AgentCommand = require('./commands/agent');
 const HubCommand = require('./commands/hub');
 const RelayCommand = require('./commands/relay');
+const HubLifecycle = require('./hub/HubLifecycle');
 
 function bootstrap() {
   try {
@@ -38,18 +39,21 @@ function bootstrap() {
     const dependencies = configManager.get('dependencies') || {};
     const orchestrator = new EcosystemOrchestrator(adapters, dependencies);
     const profileManager = new ProfileManager(configManager);
+    // YasinHub gateway: Hub-managed services are routed to the Hub API
+    // (sole Control Plane). The CLI never manages those processes itself.
+    const hubGateway = new HubLifecycle(configManager);
 
     registry.register(new ConfigCommand(configManager));
     registry.register(new DoctorCommand(configManager));
-    registry.register(new StatusCommand(configManager, serviceManager, pluginSystem));
+    registry.register(new StatusCommand(configManager, serviceManager, pluginSystem, hubGateway));
     registry.register(new ServiceCommand(serviceManager));
     registry.register(new PluginCommand(pluginSystem));
     registry.register(new DiscoverCommand(adapters));
-    registry.register(new HealthCommand(adapters));
+    registry.register(new HealthCommand(adapters, hubGateway));
     registry.register(new LogsCommand(serviceManager));
-    registry.register(new LifecycleCommand('start', orchestrator));
-    registry.register(new LifecycleCommand('stop', orchestrator));
-    registry.register(new LifecycleCommand('restart', orchestrator));
+    registry.register(new LifecycleCommand('start', orchestrator, hubGateway));
+    registry.register(new LifecycleCommand('stop', orchestrator, hubGateway));
+    registry.register(new LifecycleCommand('restart', orchestrator, hubGateway));
     registry.register(new ProfileCommand(profileManager));
     registry.register(new CreateCommand());
 
